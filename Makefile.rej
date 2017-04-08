@@ -1,0 +1,49 @@
+--- Makefile	20 Jul 2013 14:28:56 -0000	1.9
++++ Makefile	7 Apr 2015 00:01:25 -0000
+@@ -42,11 +42,11 @@
+ 
+ # Win32/Win64 compiles
+ ${ARCHDIR}/catdcd.exe : ${CATDCDOBJS} ${COMPILEDIR}/lib_${ARCH}/molfile/libmolfile_plugin.lib
+-	LINK ${CATDCDOBJS} /OUT:${ARCHDIR}/catdcd.exe /LIBPATH:${COMPILEDIR}/lib_${ARCH}/molfile libmolfile_plugin.lib ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS}
++	LINK ${CATDCDOBJS} /OUT:${ARCHDIR}/catdcd.exe /LIBPATH:${COMPILEDIR}/lib_${ARCH}/molfile libmolfile_plugin.lib ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} ${EXPATLDFLAGS} ${SQLITELDFLAGS}
+ 
+ # all other platforms
+ ${ARCHDIR}/catdcd : ${CATDCDOBJS} ${COMPILEDIR}/lib_${ARCH}/molfile/libmolfile_plugin.a
+-	${CXX} ${CXXFLAGS} ${CATDCDOBJS} -o ${ARCHDIR}/catdcd -L${COMPILEDIR}/lib_${ARCH}/molfile -lmolfile_plugin ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} -lm
++	${CXX} ${CXXFLAGS} ${CATDCDOBJS} -o ${ARCHDIR}/catdcd -L${COMPILEDIR}/lib_${ARCH}/molfile -lmolfile_plugin ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} ${EXPATLDFLAGS} ${SQLITELDFLAGS} -lm
+ 
+ ${ARCHDIR}/hash.o: hash.h hash.c
+ 	${CXX} ${CXXFLAGS} ${INCDIR} -c ${SRCDIR}/hash.c $(COPTO)${ARCHDIR}/hash.o
+--- Makefile	30 May 2007 02:41:51 -0000	1.9
++++ Makefile	7 Apr 2015 00:01:25 -0000
+@@ -49,11 +49,11 @@
+ 
+ # Win32/Win64 compiles
+ ${ARCHDIR}/cionize.exe : ${IONIZEOBJS} ${MGPOTOBJS} ${ARCHDIR}/cionize.o ${COMPILEDIR}/lib_${ARCH}/molfile/libmolfile_plugin.lib
+-	LINK ${IONIZEOBJS} ${MGPOTOBJS} /OUT:${ARCHDIR}/cionize.exe /LIBPATH:${COMPILEDIR}/lib_${ARCH}/molfile libmolfile_plugin.lib ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS}
++	LINK ${IONIZEOBJS} ${MGPOTOBJS} /OUT:${ARCHDIR}/cionize.exe /LIBPATH:${COMPILEDIR}/lib_${ARCH}/molfile libmolfile_plugin.lib ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} ${EXPATLDFLAGS} ${SQLITELDFLAGS}
+ 
+ # all other platforms
+ ${ARCHDIR}/cionize: ${IONIZEOBJS} ${MGPOTOBJS} ${ARCHDIR}/cionize.o ${COMPILEDIR}/lib_${ARCH}/molfile/libmolfile_plugin.a
+-	${CXX} ${CXXFLAGS} ${ARCHDIR}/cionize.o ${IONIZEOBJS} ${MGPOTOBJS} -o ${ARCHDIR}/cionize -L${COMPILEDIR}/lib_${ARCH}/molfile -lmolfile_plugin ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} -lm
++	${CXX} ${CXXFLAGS} ${ARCHDIR}/cionize.o ${IONIZEOBJS} ${MGPOTOBJS} -o ${ARCHDIR}/cionize -L${COMPILEDIR}/lib_${ARCH}/molfile -lmolfile_plugin ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} ${EXPATLDFLAGS} ${SQLITELDFLAGS} -lm
+ 
+ ${ARCHDIR}/hash.o: hash.h hash.c
+ 	${CC}  ${CCFLAGS} ${INCDIR} -c ${SRCDIR}/hash.c $(COPTO)${ARCHDIR}/hash.o
+--- Makefile	22 Feb 2011 18:45:04 -0000	1.4
++++ Makefile	7 Apr 2015 00:01:25 -0000
+@@ -62,12 +62,12 @@
+ 
+ # Win32/Win64 compiles
+ ${ARCHDIR}/volutil.exe : ${VOLUTILOBJS} ${COMPILEDIR}/lib_${ARCH}/molfile/libmolfile_plugin.lib
+-	LINK ${VOLUTILOBJS} /OUT:${ARCHDIR}/volutil.exe /LIBPATH:${COMPILEDIR}/lib_${ARCH}/molfile libmolfile_plugin.lib ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} wsock32.lib
++	LINK ${VOLUTILOBJS} /OUT:${ARCHDIR}/volutil.exe /LIBPATH:${COMPILEDIR}/lib_${ARCH}/molfile libmolfile_plugin.lib ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} ${EXPATLDFLAGS} ${SQLITELDFLAGS} wsock32.lib
+ 
+ # all other platforms
+   
+ ${ARCHDIR}/volutil: ${VOLUTILOBJS} ${COMPILEDIR}/lib_${ARCH}/molfile/libmolfile_plugin.a
+-	${CXX} ${CXXFLAGS} ${VOLUTILOBJS} -o ${ARCHDIR}/volutil -L${COMPILEDIR}/lib_${ARCH}/molfile -lmolfile_plugin ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} -lm
++	${CXX} ${CXXFLAGS} ${VOLUTILOBJS} -o ${ARCHDIR}/volutil -L${COMPILEDIR}/lib_${ARCH}/molfile -lmolfile_plugin ${TCLLIB} ${TCLLDFLAGS} ${NETCDFLIB} ${NETCDFLDFLAGS} ${EXPATLDFLAGS} ${SQLITELDFLAGS} -lm
+      
+ ${ARCHDIR}/volmap.o: ${SRCDIR}/volmap.C
+ 	${CXX} ${CXXFLAGS} ${INCDIR} -c ${SRCDIR}/volmap.C ${COPTO}${ARCHDIR}/volmap.o
