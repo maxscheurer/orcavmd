@@ -72,6 +72,9 @@ static void close_orca_read(void *mydata);
 // Function for reading timestep independent information: Main Parser
 static int parse_static_data(qmdata_t *, int *);
 
+// analyze trajectory, getting number of frames, file positions etc.
+static int analyze_traj(qmdata_t *data, orcadata *gms);
+
 // atom definitions & geometry
 static int get_input_structure(qmdata_t *data, orcadata *orca);
 
@@ -91,6 +94,7 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts);
 // for VMD
 static int read_orca_metadata(void *mydata, molfile_qm_metadata_t *metadata);
 static int read_orca_rundata(void *mydata, molfile_qm_t *qm_data);
+static int read_qm_timestep_metadata(void *mydata, molfile_qm_timestep_metadata_t *meta);
 
 static int read_timestep(void *mydata, int natoms,
        molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
@@ -98,6 +102,7 @@ static int read_timestep(void *mydata, int natoms,
 
 static int read_timestep_metadata(void *mydata, molfile_timestep_metadata_t *meta);
 
+static void print_input_data(qmdata_t *data);
 /*************************************************************
  *
  * MAIN ORCA CODE PART
@@ -239,9 +244,15 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   get_input_structure(data, orca);
 
+  if (!analyze_traj(data, orca)) {
+    printf("orcaplugin) WARNING: Truncated or abnormally terminated file!\n\n");
+  }
+
   *natoms = data->numatoms;
 
-  // read_first_frame(data);
+  read_first_frame(data);
+
+  // print_input_data(data);
 
   return TRUE;
 }
@@ -395,6 +406,14 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   printf("orcaplugin) Timestep %d:\n", data->num_frames_read);
   printf("orcaplugin) ============\n");
 
+
+  printf("nfread: %d \n", data->num_frames_read);
+  if (!data->filepos_array) {
+    printf("filepos array empty!!!\n");
+    return FALSE;
+  } else {
+
+  }
   fseek(data->file, data->filepos_array[data->num_frames_read], SEEK_SET);
 
   /*
@@ -404,76 +423,76 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
    */
 
   /* Read the coordinate block */
-  if (data->runtype==MOLFILE_RUNTYPE_OPTIMIZE ||
-      data->runtype==MOLFILE_RUNTYPE_SADPOINT) {
-    goto_keyline(data->file, "COORDINATES OF ALL ATOMS", NULL);
-    /* get the units */
-    GET_LINE(buffer, data->file);
-    sscanf(buffer, " COORDINATES OF ALL ATOMS ARE %s", word);
-    units = !strcmp(word, "(BOHR)");
-    eatline(data->file, 2);
-
-    if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
-      printf("orcaplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
-    }
-  }
-  else if (data->runtype==MOLFILE_RUNTYPE_SURFACE) {
-    if (pass_keyline(data->file, "HAS ENERGY VALUE",
-                     "...... END OF ONE-ELECTRON INTEGRALS ......")
-        == FOUND) {
-      /* Read the coordinate block following
-       * ---- SURFACE MAPPING GEOMETRY ---- */
-      int i, n;
-      for (i=0; i<natoms; i++) {
-        char atname[BUFSIZ];
-        float x,y,z;
-        GET_LINE(buffer, data->file);
-        n = sscanf(buffer,"%s %f %f %f", atname, &x,&y,&z);
-        if (n!=4 || strcmp(atname, data->atoms[i].type)) break;
-        data->atoms[i].x = x;
-        data->atoms[i].y = y;
-        data->atoms[i].z = z;
-      }
-      if (i!=natoms) {
-        printf("orcaplugin) Couldn't read surface mapping geometry for timestep %d\n", data->num_frames_read);
-      }
-    }
-    else {
-      /* Read the coordinate block following
-       * ATOM      ATOMIC                      COORDINATES (BOHR) */
-      goto_keyline(data->file, "ATOM      ATOMIC", NULL);
-      /* get the units */
-      GET_LINE(buffer, data->file);
-      sscanf(buffer, " ATOM      ATOMIC                      COORDINATES %s", word);
-      units = !strcmp(word, "(BOHR)");
-      eatline(data->file, 1);
-
-      if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
-        printf("orcaplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
-      }
-    }
-  }
-  /* XXX could merge this with OPTIMIZE/SADPOINT */
-  else if (data->runtype==MOLFILE_RUNTYPE_MEX) {
-    int numuniqueatoms = natoms;
-    goto_keyline(data->file, "COORDINATES OF SYMMETRY UNIQUE ATOMS", NULL);
-    /* get the units */
-    GET_LINE(buffer, data->file);
-    sscanf(buffer, " COORDINATES OF SYMMETRY UNIQUE ATOMS ARE %s", word);
-    units = !strcmp(word, "(BOHR)");
-    eatline(data->file, 2);
-    if (!get_coordinates(data->file, &data->atoms, units, &numuniqueatoms)) {
-      printf("orcaplugin) Expanding symmetry unique coordinates for timestep %d\n", data->num_frames_read);
-
-      /* Create images of symmetry unique atoms so that we have
-       * the full coordinate set. */
-      symmetry_expand(&data->atoms, numuniqueatoms, natoms,
-                      data->pointgroup, data->naxis);
-    }
-  }
+  // if (data->runtype==MOLFILE_RUNTYPE_OPTIMIZE ||
+  //     data->runtype==MOLFILE_RUNTYPE_SADPOINT) {
+  //   goto_keyline(data->file, "COORDINATES OF ALL ATOMS", NULL);
+  //   /* get the units */
+  //   GET_LINE(buffer, data->file);
+  //   sscanf(buffer, " COORDINATES OF ALL ATOMS ARE %s", word);
+  //   units = !strcmp(word, "(BOHR)");
+  //   eatline(data->file, 2);
+  //
+  //   if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
+  //     printf("orcaplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
+  //   }
+  // }
+  // else if (data->runtype==MOLFILE_RUNTYPE_SURFACE) {
+  //   if (pass_keyline(data->file, "HAS ENERGY VALUE",
+  //                    "...... END OF ONE-ELECTRON INTEGRALS ......")
+  //       == FOUND) {
+  //     /* Read the coordinate block following
+  //      * ---- SURFACE MAPPING GEOMETRY ---- */
+  //     int i, n;
+  //     for (i=0; i<natoms; i++) {
+  //       char atname[BUFSIZ];
+  //       float x,y,z;
+  //       GET_LINE(buffer, data->file);
+  //       n = sscanf(buffer,"%s %f %f %f", atname, &x,&y,&z);
+  //       if (n!=4 || strcmp(atname, data->atoms[i].type)) break;
+  //       data->atoms[i].x = x;
+  //       data->atoms[i].y = y;
+  //       data->atoms[i].z = z;
+  //     }
+  //     if (i!=natoms) {
+  //       printf("orcaplugin) Couldn't read surface mapping geometry for timestep %d\n", data->num_frames_read);
+  //     }
+  //   }
+  //   else {
+  //     /* Read the coordinate block following
+  //      * ATOM      ATOMIC                      COORDINATES (BOHR) */
+  //     goto_keyline(data->file, "ATOM      ATOMIC", NULL);
+  //     /* get the units */
+  //     GET_LINE(buffer, data->file);
+  //     sscanf(buffer, " ATOM      ATOMIC                      COORDINATES %s", word);
+  //     units = !strcmp(word, "(BOHR)");
+  //     eatline(data->file, 1);
+  //
+  //     if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
+  //       printf("orcaplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
+  //     }
+  //   }
+  // }
+  // /* XXX could merge this with OPTIMIZE/SADPOINT */
+  // else if (data->runtype==MOLFILE_RUNTYPE_MEX) {
+  //   int numuniqueatoms = natoms;
+  //   goto_keyline(data->file, "COORDINATES OF SYMMETRY UNIQUE ATOMS", NULL);
+  //   /* get the units */
+  //   GET_LINE(buffer, data->file);
+  //   sscanf(buffer, " COORDINATES OF SYMMETRY UNIQUE ATOMS ARE %s", word);
+  //   units = !strcmp(word, "(BOHR)");
+  //   eatline(data->file, 2);
+  //   if (!get_coordinates(data->file, &data->atoms, units, &numuniqueatoms)) {
+  //     printf("orcaplugin) Expanding symmetry unique coordinates for timestep %d\n", data->num_frames_read);
+  //
+  //     /* Create images of symmetry unique atoms so that we have
+  //      * the full coordinate set. */
+  //     symmetry_expand(&data->atoms, numuniqueatoms, natoms,
+  //                     data->pointgroup, data->naxis);
+  //   }
+  // }
 
   /* get a convenient pointer to the current qm timestep */
-  cur_ts = data->qm_timestep + data->num_frames_read;
+  // cur_ts = data->qm_timestep + data->num_frames_read;
 
   /* read the SCF energies */
   if (get_scfdata(data, cur_ts) == FALSE) {
@@ -548,6 +567,217 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
 }
 
 
+/* Analyze the trajectory.
+ * Read the parameters controlling geometry search and
+ * find the end of the trajectory, couinting the frames
+ * on the way. Store the filepointer for the beginning of
+ * each frame in *filepos_array. */
+static int analyze_traj(qmdata_t *data, orcadata *gms) {
+  char buffer[BUFSIZ], nserch[BUFSIZ];
+  char *line;
+  long filepos;
+  filepos = ftell(data->file);
+
+  data->filepos_array = (long* )calloc(1, sizeof(long ));
+
+  /* currently, only one frame is supported!
+   * lines 3130-3348 in gamessplugin.c
+   */
+  if (TRUE) {
+    /* We have just one frame */
+    data->num_frames = 1;
+    pass_keyline(data->file, "Single Point Calculation", NULL);
+    data->filepos_array[0] = ftell(data->file);
+
+    /* Check wether SCF has converged */
+    // if (pass_keyline(data->file,
+    //                  "SCF IS UNCONVERGED, TOO MANY ITERATIONS",
+    //                  "ENERGY COMPONENTS")==FOUND) {
+    //   printf("gamessplugin) SCF IS UNCONVERGED, TOO MANY ITERATIONS\n");
+    //   data->status = MOLFILE_QMSTATUS_SCF_NOT_CONV;
+    // } else {
+    //   data->status = MOLFILE_QMSTATUS_OPT_CONV;
+    //   fseek(data->file, data->filepos_array[0], SEEK_SET);
+    // }
+
+    pass_keyline(data->file, "FINAL SINGLE POINT ENERGY", NULL);
+    data->end_of_traj = ftell(data->file);
+
+    /* Allocate memory for the frame */
+    data->qm_timestep = (qm_timestep_t *)calloc(1, sizeof(qm_timestep_t));
+    memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
+
+    return TRUE;
+  }
+
+  printf("gamessplugin) Analyzing trajectory...\n");
+  data->status = MOLFILE_QMSTATUS_UNKNOWN;
+
+  while (0) {
+    if (!fgets(buffer, sizeof(buffer), data->file)) break;
+    line = trimleft(buffer);
+
+    /* at this point we have to distinguish between
+     * pre="27 JUN 2005 (R2)" and "27 JUN 2005 (R2)"
+     * versions since the output format for geometry
+     * optimizations has changed */
+
+    // if (gms->version==FIREFLY8POST6695){
+    //   strcpy(nserch, "NSERCH=");
+    // }
+    // else if (gms->version==FIREFLY8PRE6695) {
+    //   strcpy(nserch, "1NSERCH=");
+    // }
+    // else if (gms->version==GAMESSPRE20050627) {
+    //   strcpy(nserch, "1NSERCH=");
+    // }
+    // else if (gms->version==GAMESSPOST20050627) {
+    //   strcpy(nserch, "BEGINNING GEOMETRY SEARCH POINT NSERCH=");
+    // }
+
+    if (strstr(line, nserch) ||
+        strstr(line, "---- SURFACE MAPPING GEOMETRY") ||
+        strstr(line, "MINIMUM ENERGY CROSSING POINT SEARCH") ||
+        (data->runtype==MOLFILE_RUNTYPE_MEX && strstr(line, "NSERCH=")==line)) {
+      printf("gamessplugin) %s", line);
+
+      if (data->num_frames > 0) {
+        data->filepos_array = (long*)realloc(data->filepos_array,
+                                (data->num_frames+1)*sizeof(long));
+      }
+      data->filepos_array[data->num_frames] = ftell(data->file);
+      if (data->runtype==MOLFILE_RUNTYPE_SURFACE) {
+        int ret = goto_keyline(data->file,
+                               "ATOM      ATOMIC", "HAS ENERGY VALUE",
+                               "---- SURFACE MAPPING GEOMETRY ----", NULL);
+        if (ret>0 && ret<3 &&
+            (have_keyline(data->file, "...... END OF ONE-ELECTRON INTEGRALS ......",
+                          "---- SURFACE MAPPING GEOMETRY ----") ||
+             have_keyline(data->file, "... DONE WITH POTENTIAL SURFACE SCAN",
+                          "---- SURFACE MAPPING GEOMETRY ----"))) {
+          data->num_frames++;
+        }
+      }
+      else if (pass_keyline(data->file, "COORDINATES OF",
+                            "BEGINNING GEOMETRY SEARCH POINT NSERCH=")==FOUND)
+      {
+        /* Make sure that we have at least a complete coordinate
+           block in order to consider this a new frame. */
+        if (have_keyline(data->file, "INTERNUCLEAR DISTANCES",
+                         "1 ELECTRON INTEGRALS") ||
+            have_keyline(data->file, "1 ELECTRON INTEGRALS",
+                         "BEGINNING GEOMETRY SEARCH POINT NSERCH=")) {
+          data->num_frames++;
+        }
+      }
+    }
+    else if (strstr(line, "***** EQUILIBRIUM GEOMETRY LOCATED") ||
+             strstr(line, "... DONE WITH POTENTIAL SURFACE SCAN")) {
+      printf("gamessplugin) ==== End of trajectory (%d frames) ====\n",
+             data->num_frames);
+      data->status = MOLFILE_QMSTATUS_OPT_CONV;
+      break;
+    }
+    else if (strstr(line, "***** FAILURE TO LOCATE STATIONARY POINT,")) {
+      printf("gamessplugin) %s\n", line);
+      if (strstr(strchr(line, ','), "SCF HAS NOT CONVERGED")) {
+        data->status = MOLFILE_QMSTATUS_SCF_NOT_CONV;
+        break;
+      }
+      else if (strstr(strchr(line, ','), "TOO MANY STEPS TAKEN")) {
+        data->status = MOLFILE_QMSTATUS_OPT_NOT_CONV;
+        break;
+      }
+    }
+  }
+
+  data->end_of_traj = ftell(data->file);
+  fseek(data->file, filepos, SEEK_SET);
+
+  if (data->status == MOLFILE_QMSTATUS_UNKNOWN) {
+    /* We didn't find any of the regular key strings,
+     * the run was most likely broken off and we have an
+     * incomplete file. */
+    data->status = MOLFILE_QMSTATUS_FILE_TRUNCATED;
+  }
+
+
+  /* Allocate memory for all frames */
+  data->qm_timestep = (qm_timestep_t *)calloc(data->num_frames,
+                                              sizeof(qm_timestep_t));
+  memset(data->qm_timestep, 0, data->num_frames*sizeof(qm_timestep_t));
+
+
+  if (data->status == MOLFILE_QMSTATUS_SCF_NOT_CONV ||
+      data->status == MOLFILE_QMSTATUS_FILE_TRUNCATED) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+
+
+/***********************************************************
+ * Provide QM metadata for next timestep.
+ * This actually triggers reading the entire next timestep
+ * since we have to parse the whole timestep anyway in order
+ * to get the metadata. So we store the read data locally
+ * and hand them to VMD when requested by read_timestep().
+ *
+ ***********************************************************/
+static int read_qm_timestep_metadata(void *mydata,
+                                    molfile_qm_timestep_metadata_t *meta) {
+  int have = 0;
+
+  qmdata_t *data = (qmdata_t *)mydata;
+
+  meta->count = -1; /* Don't know the number of frames yet */
+
+  if (data->num_frames_read > data->num_frames_sent) {
+    have = 1;
+  }
+  else if (data->num_frames_read < data->num_frames) {
+    printf("gamessplugin) Probing timestep %d\n", data->num_frames_read);
+
+    have = get_traj_frame(data, data->atoms, data->numatoms);
+  }
+
+  if (have) {
+    int i;
+    qm_timestep_t *cur_ts;
+
+    /* get a pointer to the current qm timestep */
+    cur_ts = data->qm_timestep+data->num_frames_sent;
+
+    for (i=0; (i<MOLFILE_MAXWAVEPERTS && i<cur_ts->numwave); i++) {
+      meta->num_orbitals_per_wavef[i] = cur_ts->wave[i].num_orbitals;
+      meta->has_occup_per_wavef[i]    = cur_ts->wave[i].has_occup;
+      meta->has_orben_per_wavef[i]    = cur_ts->wave[i].has_orben;
+    }
+    meta->wavef_size      = data->wavef_size;
+    meta->num_wavef       = cur_ts->numwave;
+    meta->num_scfiter     = cur_ts->num_scfiter;
+    meta->num_charge_sets = cur_ts->have_mulliken +
+      cur_ts->have_lowdin + cur_ts->have_esp;
+    if (cur_ts->gradient) meta->has_gradient = TRUE;
+
+  } else {
+    meta->has_gradient = FALSE;
+    meta->num_scfiter  = 0;
+    meta->num_orbitals_per_wavef[0] = 0;
+    meta->has_occup_per_wavef[0] = FALSE;
+    meta->num_wavef = 0;
+    meta->wavef_size = 0;
+    meta->num_charge_sets = 0;
+    data->trajectory_done = TRUE;
+  }
+
+  return MOLFILE_SUCCESS;
+}
+
+
+
 
 /*************************************************************
  *
@@ -575,9 +805,9 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.read_qm_rundata  = read_orca_rundata;
 
 #if vmdplugin_ABIVERSION > 11
-  // plugin.read_timestep_metadata    = read_timestep_metadata;
-//   plugin.read_qm_timestep_metadata = read_qm_timestep_metadata;
-  // plugin.read_timestep = read_timestep;
+  plugin.read_timestep_metadata    = read_timestep_metadata;
+  plugin.read_qm_timestep_metadata = read_qm_timestep_metadata;
+  plugin.read_timestep = read_timestep;
 #endif
 
   return VMDPLUGIN_SUCCESS;
@@ -619,14 +849,17 @@ static int read_timestep(void *mydata, int natoms,
        molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
 			 molfile_qm_timestep_t *qm_ts)
 {
-  printf("READING TIMESTEP\n");
+  printf("--- READING TIMESTEP --- \n");
   qmdata_t *data = (qmdata_t *)mydata;
   qm_timestep_t *cur_ts;
   int offset;
   int i = 0;
   int num_charge_sets = 0;
 
-  if (data->trajectory_done == TRUE) return MOLFILE_ERROR;
+  if (data->trajectory_done == TRUE) {
+    printf("orcaplugin) Trajectory done.\n");
+    return MOLFILE_ERROR;
+  }
 
   printf("copying coords.\n");
   /* copy the coordinates */
@@ -634,83 +867,84 @@ static int read_timestep(void *mydata, int natoms,
     ts->coords[3*i  ] = data->atoms[i].x;
     ts->coords[3*i+1] = data->atoms[i].y;
     ts->coords[3*i+2] = data->atoms[i].z;
+    printf("x: %f y: %f z: %f\n", data->atoms[i].x, data->atoms[i].y, data->atoms[i].z);
   }
 
-    printf("ts pointer.\n");
+  // printf("ts pointer.\n");
   /* get a convenient pointer to the current qm timestep */
-  cur_ts = data->qm_timestep+data->num_frames_sent;
-
-  /* store the SCF energies */
-  for (i=0; i<cur_ts->num_scfiter; i++) {
-    qm_ts->scfenergies[i] = cur_ts->scfenergies[i];
-  }
-
-  /* store gradients */
-  if (cur_ts->gradient) {
-    for (i=0; i<3*natoms; i++) {
-      qm_ts->gradient[i] = cur_ts->gradient[i];
-    }
-  }
-
-  /* store charge sets*/
-  if (cur_ts->have_mulliken) {
-    offset = num_charge_sets*data->numatoms;
-    for (i=0; i<data->numatoms; i++) {
-      qm_ts->charges[offset+i] = cur_ts->mulliken_charges[i];
-    }
-    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_MULLIKEN;
-    num_charge_sets++;
-  }
-
-  if (cur_ts->have_lowdin) {
-    offset = num_charge_sets*data->numatoms;
-    for (i=0; i<data->numatoms; i++) {
-      qm_ts->charges[offset+i] = cur_ts->lowdin_charges[i];
-    }
-    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_LOWDIN;
-    num_charge_sets++;
-  }
-  if (cur_ts->have_esp) {
-    offset = num_charge_sets*data->numatoms;
-    for (i=0; i<data->numatoms; i++) {
-      qm_ts->charges[offset+i] = cur_ts->esp_charges[i];
-    }
-    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_ESP;
-    num_charge_sets++;
-  }
-
-
-  /* store the wave function and orbital energies */
-  if (cur_ts->wave) {
-    for (i=0; i<cur_ts->numwave; i++) {
-      qm_wavefunction_t *wave = &cur_ts->wave[i];
-      qm_ts->wave[i].type         = wave->type;
-      qm_ts->wave[i].spin         = wave->spin;
-      qm_ts->wave[i].excitation   = wave->exci;
-      qm_ts->wave[i].multiplicity = wave->mult;
-      qm_ts->wave[i].energy       = wave->energy;
-      strncpy(qm_ts->wave[i].info, wave->info, MOLFILE_BUFSIZ);
-
-      if (wave->wave_coeffs) {
-        memcpy(qm_ts->wave[i].wave_coeffs, wave->wave_coeffs,
-               wave->num_orbitals*data->wavef_size*sizeof(float));
-      }
-      if (wave->orb_energies) {
-        memcpy(qm_ts->wave[i].orbital_energies, wave->orb_energies,
-               wave->num_orbitals*sizeof(float));
-      }
-      if (wave->has_occup) {
-        memcpy(qm_ts->wave[i].occupancies, wave->orb_occupancies,
-               wave->num_orbitals*sizeof(float));
-      }
-    }
-  }
-
-  if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
-      data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+  // cur_ts = data->qm_timestep+data->num_frames_sent;
+  //
+  // /* store the SCF energies */
+  // for (i=0; i<cur_ts->num_scfiter; i++) {
+  //   qm_ts->scfenergies[i] = cur_ts->scfenergies[i];
+  // }
+  //
+  // /* store gradients */
+  // if (cur_ts->gradient) {
+  //   for (i=0; i<3*natoms; i++) {
+  //     qm_ts->gradient[i] = cur_ts->gradient[i];
+  //   }
+  // }
+  //
+  // /* store charge sets*/
+  // if (cur_ts->have_mulliken) {
+  //   offset = num_charge_sets*data->numatoms;
+  //   for (i=0; i<data->numatoms; i++) {
+  //     qm_ts->charges[offset+i] = cur_ts->mulliken_charges[i];
+  //   }
+  //   qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_MULLIKEN;
+  //   num_charge_sets++;
+  // }
+  //
+  // if (cur_ts->have_lowdin) {
+  //   offset = num_charge_sets*data->numatoms;
+  //   for (i=0; i<data->numatoms; i++) {
+  //     qm_ts->charges[offset+i] = cur_ts->lowdin_charges[i];
+  //   }
+  //   qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_LOWDIN;
+  //   num_charge_sets++;
+  // }
+  // if (cur_ts->have_esp) {
+  //   offset = num_charge_sets*data->numatoms;
+  //   for (i=0; i<data->numatoms; i++) {
+  //     qm_ts->charges[offset+i] = cur_ts->esp_charges[i];
+  //   }
+  //   qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_ESP;
+  //   num_charge_sets++;
+  // }
+  //
+  //
+  // /* store the wave function and orbital energies */
+  // if (cur_ts->wave) {
+  //   for (i=0; i<cur_ts->numwave; i++) {
+  //     qm_wavefunction_t *wave = &cur_ts->wave[i];
+  //     qm_ts->wave[i].type         = wave->type;
+  //     qm_ts->wave[i].spin         = wave->spin;
+  //     qm_ts->wave[i].excitation   = wave->exci;
+  //     qm_ts->wave[i].multiplicity = wave->mult;
+  //     qm_ts->wave[i].energy       = wave->energy;
+  //     strncpy(qm_ts->wave[i].info, wave->info, MOLFILE_BUFSIZ);
+  //
+  //     if (wave->wave_coeffs) {
+  //       memcpy(qm_ts->wave[i].wave_coeffs, wave->wave_coeffs,
+  //              wave->num_orbitals*data->wavef_size*sizeof(float));
+  //     }
+  //     if (wave->orb_energies) {
+  //       memcpy(qm_ts->wave[i].orbital_energies, wave->orb_energies,
+  //              wave->num_orbitals*sizeof(float));
+  //     }
+  //     if (wave->has_occup) {
+  //       memcpy(qm_ts->wave[i].occupancies, wave->orb_occupancies,
+  //              wave->num_orbitals*sizeof(float));
+  //     }
+  //   }
+  // }
+  //
+  // if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
+  //     data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
     /* We have only a single point */
     data->trajectory_done = TRUE;
-  }
+  // }
 
   data->num_frames_sent++;
 
@@ -936,4 +1170,100 @@ static void close_orca_read(void *mydata) {
   free(data->qm_timestep);
   free(data->format_specific_data);
   free(data);
+}
+
+
+
+static void print_input_data(qmdata_t *data) {
+  int i, j, k;
+  int primcount=0;
+  int shellcount=0;
+
+  printf("\nDATA READ FROM FILE:\n\n");
+  printf(" %10s WORDS OF MEMORY AVAILABLE\n", data->memory);
+  printf("\n");
+  printf("     BASIS OPTIONS\n");
+  printf("     -------------\n");
+  printf("%s\n", data->basis_string);
+  printf("\n\n\n");
+  printf("     RUN TITLE\n");
+  printf("     ---------\n");
+  printf(" %s\n", data->runtitle);
+  printf("\n");
+  printf(" THE POINT GROUP OF THE MOLECULE IS %s\n", "XXX");
+  printf(" THE ORDER OF THE PRINCIPAL AXIS IS %5i\n", 0);
+  printf("\n");
+  printf(" YOUR FULLY SUBSTITUTED Z-MATRIX IS\n");
+  printf("\n");
+  printf(" THE MOMENTS OF INERTIA ARE (AMU-ANGSTROM**2)\n");
+  printf(" IXX=%10.3f   IYY=%10.3f   IZZ=%10.3f\n", 0.0, 0.0, 0.0);
+  printf("\n");
+  printf(" ATOM      ATOMIC                      COORDINATES (BOHR)\n");
+  printf("           CHARGE         X                   Y                   Z\n");
+  for (i=0; i<data->numatoms; i++) {
+    printf(" %-8s %6d", data->atoms[i].type, data->atoms[i].atomicnum);
+
+    printf("%17.10f",   ANGS_TO_BOHR*data->atoms[i].x);
+    printf("%20.10f",   ANGS_TO_BOHR*data->atoms[i].y);
+    printf("%20.10f\n", ANGS_TO_BOHR*data->atoms[i].z);
+  }
+  printf("\n");
+  printf("     ATOMIC BASIS SET\n");
+  printf("     ----------------\n");
+  printf(" THE CONTRACTED PRIMITIVE FUNCTIONS HAVE BEEN UNNORMALIZED\n");
+  printf(" THE CONTRACTED BASIS FUNCTIONS ARE NOW NORMALIZED TO UNITY\n");
+  printf("\n");
+  printf("  SHELL TYPE  PRIMITIVE        EXPONENT          CONTRACTION COEFFICIENT(S)\n");
+  printf("\n");
+
+#if 0
+  for (i=0; i<data->numatoms; i++) {
+    printf("%-8s\n\n", data->atoms[i].type);
+    printf("\n");
+    printf("nshells=%d\n", data->num_shells_per_atom[i]);
+
+    for (j=0; j<data->num_shells_per_atom[i]; j++) {
+      printf("nprim=%d\n", data->num_prim_per_shell[shellcount]);
+
+      for (k=0; k<data->num_prim_per_shell[shellcount]; k++) {
+        printf("%6d   %d %7d %22f%22f\n", j, data->shell_types[shellcount],
+               primcount+1, data->basis[2*primcount], data->basis[2*primcount+1]);
+        primcount++;
+      }
+
+      printf("\n");
+      shellcount++;
+    }
+  }
+#endif
+  printf("gamessplugin) =================================================================\n");
+  for (i=0; i<data->num_basis_atoms; i++) {
+    printf("%-8s (%10s)\n\n", data->atoms[i].type, data->basis_set[i].name);
+    printf("\n");
+
+    for (j=0; j<data->basis_set[i].numshells; j++) {
+
+      for (k=0; k<data->basis_set[i].shell[j].numprims; k++) {
+        printf("%6d   %d %7d %22f%22f\n", j,
+               data->basis_set[i].shell[j].type,
+               primcount+1,
+               data->basis_set[i].shell[j].prim[k].exponent,
+               data->basis_set[i].shell[j].prim[k].contraction_coeff);
+        primcount++;
+      }
+
+      printf("\n");
+      shellcount++;
+    }
+  }
+  printf("\n");
+  printf(" TOTAL NUMBER OF BASIS SET SHELLS             =%5d\n", data->num_shells);
+  printf(" NUMBER OF CARTESIAN GAUSSIAN BASIS FUNCTIONS =%5d\n", data->wavef_size);
+  printf(" NUMBER OF ELECTRONS                          =%5d\n", data->num_electrons);
+  printf(" CHARGE OF MOLECULE                           =%5d\n", data->totalcharge);
+  printf(" SPIN MULTIPLICITY                            =%5d\n", data->multiplicity);
+  printf(" NUMBER OF OCCUPIED ORBITALS (ALPHA)          =%5d\n", data->num_occupied_A);
+  printf(" NUMBER OF OCCUPIED ORBITALS (BETA )          =%5d\n", data->num_occupied_B);
+  printf(" TOTAL NUMBER OF ATOMS                        =%5i\n", data->numatoms);
+  printf("\n");
 }
