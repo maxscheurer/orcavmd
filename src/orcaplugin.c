@@ -43,11 +43,14 @@ Inspired from gamessplugin.c
 /* ######################################################## */
 
 typedef struct {
-  int version; /* version = 0 : unknown, do not read the file!
+  int version; /* version = 0 : not supported, do not read the file!
                 * version = 1 : version 3.0.0, 3.0.1, 3.0.3
                 * version = 2 : version 4.0.0
                 */
-  int digits[3];
+
+  int digits[3]; /* The three digits of the orca version number
+                  * e.g. 4.0.0 (i.e. digits[0].digits[1].digits[2])
+                  * */
 } orcadata;
 
 
@@ -105,10 +108,11 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
   if(have_orca(data, orca)) {
     if (orca->version != 0) {
       printf("orcaplugin) Orca version: %d.%d.%d \n", orca->digits[0],
-    orca->digits[1],orca->digits[2]);
+                                            orca->digits[1],orca->digits[2]);
     } else {
       printf("orcaplugin) Orca version not supported: %d.%d.%d \n", orca->digits[0],
-    orca->digits[1],orca->digits[2]);
+                                            orca->digits[1],orca->digits[2]);
+      return NULL;
     }
   } else {
     printf("orcaplugin) This is not an Orca output file!\n");
@@ -155,10 +159,13 @@ static int have_orca(qmdata_t *data, orcadata* orca) {
     switch (mainVersion) {
       case ORCA4:
         orca->version = 2;
+        break;
       case ORCA3:
         orca->version = 1;
+        break;
       default:
         orca->version = 0;
+        break;
     }
   } else {
     PRINTERR;

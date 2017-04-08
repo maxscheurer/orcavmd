@@ -17,15 +17,15 @@
 
 /* *******************************************************
  *
- *          G A M E S S     P L U G I N 
+ *          G A M E S S     P L U G I N
  *
  * Read GAMESS-US log files.
- * This file reader is fairly robust and should be able to 
+ * This file reader is fairly robust and should be able to
  * parse GAMESS logfiles from a wide range of versions
- * (2000-2009 tested). 
+ * (2000-2009 tested).
  * From the variety of data that can be found in GAMESS
- * logfiles we read coordinates, basis set, wavefunctions, 
- * gradients, hessian, charges, frequencies and a number 
+ * logfiles we read coordinates, basis set, wavefunctions,
+ * gradients, hessian, charges, frequencies and a number
  * of data describing the type of calculation.
  *
  * ********************************************************/
@@ -33,7 +33,7 @@
 
 /**********************************************************
 
- 
+
 FUNCTION CALL CHAIN
 ===================
 
@@ -41,15 +41,15 @@ Below is an overview about the hierarchy of function calls.
 Not all functions or possible branches are listed but the
 general picture is covered.
 
-The top level consists of functions defined by the 
+The top level consists of functions defined by the
 molfile_plugin interface: First VMD calls open_gamess_read()
-then it requests information about atoms and topology using 
+then it requests information about atoms and topology using
 read_gamess_structure(). Note that no coordinates are provided
 at this step. Timestep independent data such as info about the
-calculation method or the basis set are provided through 
+calculation method or the basis set are provided through
 read_gamess_rundata(). Since the allocation of these
 arrays populated for this purpose is done by VMD rather than
-the plugin, VMD needs to know the sizes beforehand. This is 
+the plugin, VMD needs to know the sizes beforehand. This is
 achieved by calling read_qm_metadata() before read_qm_rundata().
 
 Next, in order to obtain the info for all timesteps VMD will call
@@ -107,7 +107,7 @@ VMD
  |             |__ get_cart_hessian()
  |             |__ get_normal_modes()
  |             |__ read_localized_orbitals()
- |        
+ |
  |
  |__ read_gamess_structure()
  |
@@ -121,25 +121,25 @@ VMD
  |__ read_qm_timestep_metadata()     |
  |__ read_timestep()                 |
  |                                   |
- |  WHILE(FRAMES)               -----' 
+ |  WHILE(FRAMES)               -----'
  |
  |
  |__ close_gamess_read()
 
- 
+
 
 PARSING STRATEGY
 ================
 
 Because we potentially have to read quite a bit into the
-logfile in order to obtain the number of atoms required by 
-open_gamess_read(), we just parse the whole file and store 
-all timestep independent data. This process is managed by 
+logfile in order to obtain the number of atoms required by
+open_gamess_read(), we just parse the whole file and store
+all timestep independent data. This process is managed by
 parse_static_data(). Some of the static data are at the end
 of the file. Function analyze_traj() find the end of the
 trajectory and records the file pointer for the beginning
-of each frame. Thus, reading the frames when they are requested 
-later by read_timestep() is much faster without having to  
+of each frame. Thus, reading the frames when they are requested
+later by read_timestep() is much faster without having to
 keep large amountss of data in memory.
 
 
@@ -191,10 +191,10 @@ keep large amountss of data in memory.
 #define FIREFLY8POST6695   4
 
 /* Data specific to parsing GAMESS files */
-typedef struct 
+typedef struct
 {
   int  version; /* here we track the GAMESS versions, since the
-                 * file format has changed with 
+                 * file format has changed with
                  * version 27 JUN 2005 (R2);
                  * version = 1  : pre-27 JUN 2005 (R2)
                  * version = 2  : 27 JUN 2005 (R2) or later
@@ -218,7 +218,7 @@ typedef struct
 /* ######################################################## */
 
 /* this routine is the main gamess log file
- * parser responsible for static, i.e. 
+ * parser responsible for static, i.e.
  * non-trajectory information */
 static int parse_static_data(qmdata_t *, int *);
 
@@ -242,7 +242,7 @@ static int get_runtitle(qmdata_t *);
 static int get_input_structure(qmdata_t *data, gmsdata *gms);
 
 /* Read basis set and orbital statistics such as
- * # of shells, # of A/B orbitals, # of electrons, 
+ * # of shells, # of A/B orbitals, # of electrons,
  * multiplicity and total charge */
 static int get_basis_stats(qmdata_t *);
 
@@ -256,7 +256,7 @@ static int get_contrl_firefly(qmdata_t *);
  * if an unsupported one is encountered. */
 static int get_contrl(qmdata_t *);
 
-/* Read input parameters regarding calculation of 
+/* Read input parameters regarding calculation of
  * certain molecular properties such as electrostatic
  * moments and the MEP. */
 static int get_properties_input(qmdata_t *);
@@ -272,7 +272,7 @@ static int get_mcscf(qmdata_t *data);
 
 /* the function get_initial_info provides the atom number,
  * coordinates, and atom types and stores them
- * temporarily. */ 
+ * temporarily. */
 static int get_final_properties (qmdata_t *);
 
 /* Read atom coordinate block */
@@ -337,16 +337,16 @@ static int get_final_gradient(qmdata_t *, qm_timestep_t *ts);
 /* Read ESP charges. */
 static int get_esp_charges(qmdata_t *data);
 
-/* For runtyp=HESSIAN, this subroutine scans the file for 
- * the hessian matrix in internal coordinates 
+/* For runtyp=HESSIAN, this subroutine scans the file for
+ * the hessian matrix in internal coordinates
  * as well as the internal coordinate information */
 static int get_int_coords(qmdata_t *);
 
 /* get Hessian matrix in internal coordinates */
 static int get_int_hessian(qmdata_t *);
 
-/* For runtyp=HESSIAN, this subroutine scans the file for 
- * the cartesian hessian matrix */ 
+/* For runtyp=HESSIAN, this subroutine scans the file for
+ * the cartesian hessian matrix */
 static int get_cart_hessian(qmdata_t *);
 
 /* For runtyp=HESSIAN, this subroutine reads the frequencies
@@ -371,7 +371,7 @@ static int get_normal_modes(qmdata_t *);
  * read_gamess_metadata() and read_gamess_rundata().
  *
  * *************************************************************/
-static void *open_gamess_read(const char *filename, 
+static void *open_gamess_read(const char *filename,
                   const char *filetype, int *natoms) {
 
   FILE *fd;
@@ -380,7 +380,7 @@ static void *open_gamess_read(const char *filename,
 
   /* open the input file */
   fd = fopen(filename, "rb");
- 
+
   if (!fd) {
     PRINTERR;
     return NULL;
@@ -423,8 +423,8 @@ static void *open_gamess_read(const char *filename,
       return NULL;
     }
 
-    /* get the non-trajectory information from the log file */    
-    if (parse_static_data(data, natoms) == FALSE) 
+    /* get the non-trajectory information from the log file */
+    if (parse_static_data(data, natoms) == FALSE)
       return NULL;
   }
   else {
@@ -437,27 +437,27 @@ static void *open_gamess_read(const char *filename,
 
 
 /************************************************************
- * 
+ *
  * Provide VMD with the structure of the molecule, i.e the
  * atoms coordinates names, etc.
  *
  *************************************************************/
-static int read_gamess_structure(void *mydata, int *optflags, 
-                      molfile_atom_t *atoms) 
+static int read_gamess_structure(void *mydata, int *optflags,
+                      molfile_atom_t *atoms)
 {
   qmdata_t *data = (qmdata_t *)mydata;
   qm_atom_t *cur_atom;
   molfile_atom_t *atom;
   int i = 0;
- 
+
   /* optional atomic number provided */
   *optflags = MOLFILE_ATOMICNUMBER;
-  /*  if (data->have_mulliken) 
+  /*  if (data->have_mulliken)
    *optflags |= MOLFILE_CHARGE;*/
 
   /* all the information I need has already been read in
-   * via the initial scan and I simply need to copy 
-   * everything from the temporary arrays into the 
+   * via the initial scan and I simply need to copy
+   * everything from the temporary arrays into the
    * proper VMD arrays.
    * Since there are no atom names in the GAMESS output
    * I use the atom type here --- maybe there is a better
@@ -468,9 +468,9 @@ static int read_gamess_structure(void *mydata, int *optflags,
 
   for(i=0; i<data->numatoms; i++) {
     atom = atoms+i;
-    strncpy(atom->name, cur_atom->type, sizeof(atom->name)); 
+    strncpy(atom->name, cur_atom->type, sizeof(atom->name));
     strncpy(atom->type, cur_atom->type, sizeof(atom->type));
-    strncpy(atom->resname,"", sizeof(atom->resname)); 
+    strncpy(atom->resname,"", sizeof(atom->resname));
     atom->resid = 1;
     atom->chain[0] = '\0';
     atom->segid[0] = '\0';
@@ -484,8 +484,8 @@ static int read_gamess_structure(void *mydata, int *optflags,
     */
     cur_atom++;
   }
- 
-  return MOLFILE_SUCCESS; 
+
+  return MOLFILE_SUCCESS;
 }
 
 
@@ -496,17 +496,17 @@ static int read_gamess_structure(void *mydata, int *optflags,
  * available
  *
  *****************************************************/
-static int read_gamess_metadata(void *mydata, 
+static int read_gamess_metadata(void *mydata,
     molfile_qm_metadata_t *metadata) {
 
   qmdata_t *data = (qmdata_t *)mydata;
 
   if (data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
     metadata->ncart = (3*data->numatoms);
-    metadata->nimag = data->nimag;             
-   
+    metadata->nimag = data->nimag;
+
     if (data->have_internals) {
-      metadata->nintcoords = data->nintcoords; 
+      metadata->nintcoords = data->nintcoords;
     } else {
       metadata->nintcoords = 0;
     }
@@ -521,7 +521,7 @@ static int read_gamess_metadata(void *mydata,
   metadata->num_basis_funcs = data->num_basis_funcs;
   metadata->num_basis_atoms = data->num_basis_atoms;
   metadata->num_shells      = data->num_shells;
-  metadata->wavef_size      = data->wavef_size;  
+  metadata->wavef_size      = data->wavef_size;
 
 #if vmdplugin_ABIVERSION > 11
   /* system and run info */
@@ -540,13 +540,13 @@ static int read_gamess_metadata(void *mydata,
 
 
 /******************************************************
- * 
+ *
  * Provide VMD with the static (i.e. non-trajectory)
  * data. That means we are filling the molfile_plugin
  * data structures.
  *
  ******************************************************/
-static int read_gamess_rundata(void *mydata, 
+static int read_gamess_rundata(void *mydata,
                                molfile_qm_t *qm_data) {
 
   qmdata_t *data = (qmdata_t *)mydata;
@@ -623,12 +623,12 @@ static int read_gamess_rundata(void *mydata,
       basis_data->num_shells_per_atom[i] = data->num_shells_per_atom[i];
       basis_data->atomic_number[i] = data->atomicnum_per_basisatom[i];
     }
-    
+
     for (i=0; i<data->num_shells; i++) {
       basis_data->num_prim_per_shell[i] = data->num_prim_per_shell[i];
       basis_data->shell_types[i] = data->shell_types[i];
     }
-    
+
     for (i=0; i<2*data->num_basis_funcs; i++) {
       basis_data->basis[i] = data->basis[i];
     }
@@ -638,7 +638,7 @@ static int read_gamess_rundata(void *mydata,
     }
   }
 #endif
- 
+
   return MOLFILE_SUCCESS;
 }
 
@@ -648,7 +648,7 @@ static int read_gamess_rundata(void *mydata,
 #if vmdplugin_ABIVERSION > 11
 
 /***********************************************************
- * Provide non-QM metadata for next timestep. 
+ * Provide non-QM metadata for next timestep.
  * Required by the plugin interface.
  ***********************************************************/
 static int read_timestep_metadata(void *mydata,
@@ -660,7 +660,7 @@ static int read_timestep_metadata(void *mydata,
 }
 
 /***********************************************************
- * Provide QM metadata for next timestep. 
+ * Provide QM metadata for next timestep.
  * This actually triggers reading the entire next timestep
  * since we have to parse the whole timestep anyway in order
  * to get the metadata. So we store the read data locally
@@ -690,7 +690,7 @@ static int read_qm_timestep_metadata(void *mydata,
 
     /* get a pointer to the current qm timestep */
     cur_ts = data->qm_timestep+data->num_frames_sent;
-    
+
     for (i=0; (i<MOLFILE_MAXWAVEPERTS && i<cur_ts->numwave); i++) {
       meta->num_orbitals_per_wavef[i] = cur_ts->wave[i].num_orbitals;
       meta->has_occup_per_wavef[i]    = cur_ts->wave[i].has_occup;
@@ -727,9 +727,9 @@ static int read_qm_timestep_metadata(void *mydata,
  * into the one's provided by VMD.
  *
  ***********************************************************/
-static int read_timestep(void *mydata, int natoms, 
+static int read_timestep(void *mydata, int natoms,
        molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
-			 molfile_qm_timestep_t *qm_ts) 
+			 molfile_qm_timestep_t *qm_ts)
 {
   qmdata_t *data = (qmdata_t *)mydata;
   qm_timestep_t *cur_ts;
@@ -744,9 +744,9 @@ static int read_timestep(void *mydata, int natoms,
   for (i=0; i<natoms; i++) {
     ts->coords[3*i  ] = data->atoms[i].x;
     ts->coords[3*i+1] = data->atoms[i].y;
-    ts->coords[3*i+2] = data->atoms[i].z; 
-  }    
-  
+    ts->coords[3*i+2] = data->atoms[i].z;
+  }
+
   /* get a convenient pointer to the current qm timestep */
   cur_ts = data->qm_timestep+data->num_frames_sent;
 
@@ -816,7 +816,7 @@ static int read_timestep(void *mydata, int natoms,
     }
   }
 
-  if (data->runtype == MOLFILE_RUNTYPE_ENERGY || 
+  if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
       data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
     /* We have only a single point */
     data->trajectory_done = TRUE;
@@ -871,7 +871,7 @@ static void close_gamess_read(void *mydata) {
         free(data->basis_set[i].shell[j].prim);
       }
       free(data->basis_set[i].shell);
-    } 
+    }
     free(data->basis_set);
   }
 
@@ -902,11 +902,11 @@ static void close_gamess_read(void *mydata) {
 
 /********************************************************
  *
- * Main gamess log file parser responsible for static,  
+ * Main gamess log file parser responsible for static,
  * i.e. non-trajectory information.
  *
  ********************************************************/
-static int parse_static_data(qmdata_t *data, int *natoms) 
+static int parse_static_data(qmdata_t *data, int *natoms)
 {
   /* Cast GAMESS specific data */
   gmsdata *gms = (gmsdata *)data->format_specific_data;
@@ -937,13 +937,13 @@ static int parse_static_data(qmdata_t *data, int *natoms)
   if (!get_input_structure(data, gms)) return FALSE;
 
   /* Read the basis set */
-  if (!get_basis(data))           return FALSE; 
+  if (!get_basis(data))           return FALSE;
 
-  /* Read the number of orbitals, electrons, 
+  /* Read the number of orbitals, electrons,
    * charge, multiplicity, ... */
   if (!get_basis_stats(data))     return FALSE;
 
-  /* Read input parameters regarding calculation of 
+  /* Read input parameters regarding calculation of
    * certain molecular properties such as electrostatic
    * moments and the MEP. */
   if (!get_properties_input(data)) return FALSE;
@@ -979,7 +979,7 @@ static int parse_static_data(qmdata_t *data, int *natoms)
   /* Read the properties at the end of a calculation */
   get_final_properties(data);
 
-#ifdef DEBUGGING 
+#ifdef DEBUGGING
   printf("gamessplugin) num_frames_read = %d\n", data->num_frames_read);
   printf("gamessplugin) num_frames_sent = %d\n", data->num_frames_sent);
 
@@ -1021,7 +1021,7 @@ static void print_input_data(qmdata_t *data) {
   printf("           CHARGE         X                   Y                   Z\n");
   for (i=0; i<data->numatoms; i++) {
     printf(" %-8s %6d", data->atoms[i].type, data->atoms[i].atomicnum);
-    
+
     printf("%17.10f",   ANGS_TO_BOHR*data->atoms[i].x);
     printf("%20.10f",   ANGS_TO_BOHR*data->atoms[i].y);
     printf("%20.10f\n", ANGS_TO_BOHR*data->atoms[i].z);
@@ -1095,7 +1095,7 @@ static void print_input_data(qmdata_t *data) {
  * actually a GAMESS file;
  *
  **********************************************************/
-static int have_gamess(qmdata_t *data, gmsdata *gms) 
+static int have_gamess(qmdata_t *data, gmsdata *gms)
 {
   char word[3][BUFSIZ];
   char buffer[BUFSIZ];
@@ -1112,7 +1112,7 @@ static int have_gamess(qmdata_t *data, gmsdata *gms)
   /* check if the file is GAMESS format */
   program = goto_keyline(data->file,
                           "PC GAMESS version",
-                          "GAMESS VERSION =", 
+                          "GAMESS VERSION =",
                           "Firefly version",NULL);
   if (program==1) {
     gms->have_pcgamess = 1;
@@ -1138,7 +1138,7 @@ static int have_gamess(qmdata_t *data, gmsdata *gms)
       *strchr(versionstr, ' ') = '\0';
       sscanf(buffer, "%*s %*s %*s %*s %*s %*s %d", &build);
       sscanf(versionstr, "%1d%*s", &ver);
-      printf("gamessplugin) Firefly build = %d %d\n", 
+      printf("gamessplugin) Firefly build = %d %d\n",
          ver,build);
       if (ver >= 8 && build >= 6695)
         gms->version = FIREFLY8POST6695;
@@ -1152,25 +1152,25 @@ static int have_gamess(qmdata_t *data, gmsdata *gms)
       strncpy(versionstr, strstr(buffer,"=")+2, 16);
       versionstr[16] = '\0';
     }
-    
+
     /* determine if we're dealing with pre-"27 JUN 2005"
      * version */
     sscanf(versionstr, "%d %s %d %s", &day, month, &year, rev);
-    
+
     if ( ( year >= 2006 ) ||
          ( year == 2005 && !strcmp(month,"JUN") ) ||
          ( year == 2005 && !strcmp(month,"NOV") ) ||
          ( year == 2005 && !strcmp(month,"DEC") ) )
       {
         gms->version = GAMESSPOST20050627;
-      } else { 
+      } else {
         gms->version = GAMESSPRE20050627;
       }
   }
 
   strcat(data->version_string, versionstr);
 
-  printf("gamessplugin) Version = %s\n", 
+  printf("gamessplugin) Version = %s\n",
          data->version_string);
 
   return TRUE;
@@ -1196,7 +1196,7 @@ static int get_proc_mem(qmdata_t *data, gmsdata *gms) {
 
   rewind(data->file);
 
-  
+
   /* scan for the number of processors; here we need
    * distinguish between vanilla Gamess and PC Gamess */
   if (gms->have_pcgamess == 1) {
@@ -1211,7 +1211,7 @@ static int get_proc_mem(qmdata_t *data, gmsdata *gms) {
             sscanf(buffer,"%*s %*s %*s %*s %*s %d %*s %*s",&nproc);
             break;
         }
-      } while (strcmp(&word[0][0],"ECHO") || 
+      } while (strcmp(&word[0][0],"ECHO") ||
                strcmp(&word[1][0],"THE") );
 
   }
@@ -1237,20 +1237,20 @@ static int get_proc_mem(qmdata_t *data, gmsdata *gms) {
         break;
       }
 
-    } while (strcmp(&word[0][0],"ECHO") || 
+    } while (strcmp(&word[0][0],"ECHO") ||
              strcmp(&word[1][0],"THE") );
   }
-  
+
   /* store the number of processors */
   data->nproc = nproc;
 
-  
+
   /* scan for the amount of memory requested */
   do {
     GET_LINE(buffer, data->file);
     sscanf(buffer,"%s %s",&word[0][0],&word[1][0]);
 
-  } while( strcmp(&word[0][0],"$SYSTEM") || 
+  } while( strcmp(&word[0][0],"$SYSTEM") ||
            strcmp(&word[1][0],"OPTIONS") );
 
   eatline(data->file, 1);
@@ -1316,16 +1316,16 @@ static int get_basis_options(qmdata_t *data) {
    * of qmdata_t */
   GET_LINE(buffer, data->file);
   sscanf(buffer," GBASIS=%s IGAUSS= %d", data->gbasis, &ngauss);
- 
 
-  /* in case we're using a pople style basis set, i.e. 
-   * GBASIS=N311,N31,N21 or STO we also scan for the number 
+
+  /* in case we're using a pople style basis set, i.e.
+   * GBASIS=N311,N31,N21 or STO we also scan for the number
    * of gaussians, as well as p,d,f and diffuse functions
    * and use this info to assemble a "basis set string" */
   if ( !strncmp(data->gbasis,"N311",sizeof(data->gbasis)) ||
        !strncmp(data->gbasis,"N31",sizeof(data->gbasis)) ||
        !strncmp(data->gbasis,"N21",sizeof(data->gbasis)) ||
-       !strncmp(data->gbasis,"STO",sizeof(data->gbasis)) ) 
+       !strncmp(data->gbasis,"STO",sizeof(data->gbasis)) )
   {
     int npfunc, ndfunc, nffunc;
     int diffs=FALSE, diffsp=FALSE;
@@ -1378,21 +1378,21 @@ static int get_basis_options(qmdata_t *data) {
     }
     else if (ndfunc>0) {
       sprintf(polarization, "(%dd)", ndfunc);
-    } 
+    }
     else {
       strncpy(polarization, "", sizeof(polarization));
-    } 
+    }
 
-    /* assemble the bits */ 
+    /* assemble the bits */
     if (!strcmp(data->gbasis, "STO")) {
       sprintf(data->basis_string, "STO-%dG%s%s",
               ngauss, diffuse, polarization);
     }
     else {
       sprintf(data->basis_string, "%d-%s%sG%s",
-              ngauss, (data->gbasis+1), diffuse, 
+              ngauss, (data->gbasis+1), diffuse,
               polarization);
-    }      
+    }
   }
 
   /* cc-pVnZ and cc-pCVnZ */
@@ -1442,7 +1442,7 @@ static int get_runtitle(qmdata_t *data) {
 
   if (pass_keyline(data->file, "RUN TITLE",
                    "THE POINT GROUP") != FOUND) {
-    /* This is most likely a broken file, but who knows. 
+    /* This is most likely a broken file, but who knows.
      * Since we don't really care about the title string
      * we go on here without error. */
     data->runtitle[0] = '\0';
@@ -1453,7 +1453,7 @@ static int get_runtitle(qmdata_t *data) {
   strncpy(data->runtitle,trimright(buffer),sizeof(data->runtitle));
 
   return TRUE;
-} 
+}
 
 
 /**********************************************************
@@ -1469,7 +1469,7 @@ static int get_input_structure(qmdata_t *data, gmsdata *gms) {
   long filepos;
   filepos = ftell(data->file);
 
-  /* See if we find the "ATOM      ATOMIC ..." line before 
+  /* See if we find the "ATOM      ATOMIC ..." line before
    * any of the three stopstrings mrking the beginning of
    * possible following sections. */
   if (goto_keyline(data->file,
@@ -1486,7 +1486,7 @@ static int get_input_structure(qmdata_t *data, gmsdata *gms) {
     /* This is probably an FMO calc.; if so, set flag. */
     fseek(data->file, filepos, SEEK_SET);
     if (pass_keyline(data->file,
-                     "The Fragment Molecular Orbital (FMO) method.", 
+                     "The Fragment Molecular Orbital (FMO) method.",
                      NULL)) {
       gms->have_fmo = 1;
       printf("gamessplugin) Fragment Molecular Orbital (FMO) method.\n");
@@ -1518,16 +1518,16 @@ static int get_input_structure(qmdata_t *data, gmsdata *gms) {
       GET_LINE(buffer, data->file);
       sscanf(strstr(buffer, "UNITS ="), "%s", units);
       bohr = !strcmp(units, "BOHR");
-      
+
       /* Find beginning of $FMOXYZ input card */
       rewind(data->file);
-      if (!pass_keyline(data->file, "INPUT CARD> $fmoxyz", 
+      if (!pass_keyline(data->file, "INPUT CARD> $fmoxyz",
                         "INPUT CARD> $FMOXYZ")) {
         printf("gamessplugin) No atom coordinates found!\n");
         return FALSE;
       }
-            
-      /* Read the $FMOXYZ coordinates */     
+
+      /* Read the $FMOXYZ coordinates */
       if (!get_fmoxyz(data->file, &data->atoms, bohr, &numatoms)) {
         printf("gamessplugin) Could not read coordinates from $FMOXYZ input!\n");
         return FALSE;
@@ -1560,7 +1560,7 @@ static int get_input_structure(qmdata_t *data, gmsdata *gms) {
   /* store number of atoms in data structure */
   data->numatoms = numatoms;
 
-  return TRUE; 
+  return TRUE;
 }
 
 
@@ -1612,21 +1612,21 @@ static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
     strncpy(atm->type, atname, sizeof(atm->type));
     atm->atomicnum = floor(atomicnum+0.5); /* nuclear charge */
     /*printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);*/
-   
+
     /* if coordinates are in Bohr convert them to Angstrom */
     if (unit==BOHR) {
       x *= BOHR_TO_ANGS;
       y *= BOHR_TO_ANGS;
       z *= BOHR_TO_ANGS;
     }
-    
+
     atm->x = x;
     atm->y = y;
-    atm->z = z; 
+    atm->z = z;
     i++;
   }
 
-  /* If file is broken off in the middle of the coordinate block 
+  /* If file is broken off in the middle of the coordinate block
    * we cannot use this frame. */
   if (*numatoms>=0 && *numatoms!=i) {
     (*numatoms) = i;
@@ -1676,7 +1676,7 @@ static int get_fmoxyz(FILE *file, qm_atom_t **atoms, int unit,
     strncpy(atm->type, atname, sizeof(atm->type));
     if (isalpha(element[0]))
       atm->atomicnum = get_pte_idx_from_string(element);
-    else if (isdigit(element[0])) 
+    else if (isdigit(element[0]))
       atm->atomicnum = floor(element[0]+0.5); /* nuclear charge */
     else break;
 
@@ -1686,14 +1686,14 @@ static int get_fmoxyz(FILE *file, qm_atom_t **atoms, int unit,
       y *= BOHR_TO_ANGS;
       z *= BOHR_TO_ANGS;
     }
-    
+
     atm->x = x;
     atm->y = y;
-    atm->z = z; 
+    atm->z = z;
     i++;
   }
 
-  /* If file is broken off in the middle of the coordinate block 
+  /* If file is broken off in the middle of the coordinate block
    * we cannot use this frame. */
   if (*numatoms>=0 && *numatoms!=i) return FALSE;
 
@@ -1809,13 +1809,13 @@ static int get_contrl_firefly(qmdata_t *data) {
   while ( (temp=strstr(buffer,"COORD =")) == NULL ) {
     GET_LINE(buffer, data->file);;
   }
-  strncpy(data->geometry, trimright(temp+7), sizeof(data->geometry)); 
+  strncpy(data->geometry, trimright(temp+7), sizeof(data->geometry));
   printf("gamessplugin) Coordinate type used is %s \n", data->geometry);
 
   while ( (temp=strstr(buffer,"CITYP =")) == NULL ) {
     GET_LINE(buffer, data->file);;
   }
-  strncpy(buffer, trimright(temp+7), 8); 
+  strncpy(buffer, trimright(temp+7), 8);
 
   /* determine CITYP */
   if      (!strcmp(buffer,"NONE"))  data->citype = CI_NONE;
@@ -1972,7 +1972,7 @@ static int get_contrl(qmdata_t *data) {
   while ( (temp=strstr(buffer,"COORD =")) == NULL ) {
     GET_LINE(buffer, data->file);;
   }
-  strncpy(data->geometry, trimright(temp+7), sizeof(data->geometry)); 
+  strncpy(data->geometry, trimright(temp+7), sizeof(data->geometry));
   printf("gamessplugin) Coordinate type used is %s \n", data->geometry);
 
   fseek(data->file, filepos, SEEK_SET);
@@ -1980,7 +1980,7 @@ static int get_contrl(qmdata_t *data) {
 }
 
 
-/* Read input parameters regarding calculation of 
+/* Read input parameters regarding calculation of
  * certain molecular properties such as electrostatic
  * moments and the MEP. */
 static int get_properties_input(qmdata_t *data) {
@@ -2054,13 +2054,13 @@ static int get_mcscf(qmdata_t *data) {
           while ( (temp=strstr(buffer,"NFZC=")) == NULL ) {
             GET_LINE(buffer, data->file);
           }
-          strncpy(buffer, trimright(temp+6), 5); 
+          strncpy(buffer, trimright(temp+6), 5);
           sscanf(buffer, "%d", &data->mcscf_num_core);
 
           while ( (temp=strstr(buffer,"NMCC=")) == NULL ) {
             GET_LINE(buffer, data->file);
           }
-          strncpy(buffer, trimright(temp+6), 5); 
+          strncpy(buffer, trimright(temp+6), 5);
           sscanf(buffer, "%d", &tmp);
           data-> mcscf_num_core += tmp;
           printf("gamessplugin) Number of MCSCF core orbitals = %d\n",
@@ -2082,8 +2082,8 @@ static int get_mcscf(qmdata_t *data) {
           //set scftype to none since XMCQDPT2 not supported
           data->scftype = MOLFILE_SCFTYPE_NONE;
 
-      } 
-  } 
+      }
+  }
   else {
       if (pass_keyline(data->file, "MCSCF CALCULATION",
                        "ITER     TOTAL ENERGY") != FOUND)
@@ -2108,13 +2108,13 @@ static int get_mcscf(qmdata_t *data) {
 
 /* Read the first trajectory frame. */
 static int read_first_frame(qmdata_t *data) {
-  /* The angular momentum is populated in get_wavefunction 
+  /* The angular momentum is populated in get_wavefunction
    * which is called by get_traj_frame(). We have obtained
    * the array size wavef_size already from the basis set
    * statistics */
   data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
 
-  /* Try reading the first frame. 
+  /* Try reading the first frame.
    * If there is only one frame then also read the
    * final wavefunction. */
   if (!get_traj_frame(data, data->atoms, data->numatoms)) {
@@ -2127,7 +2127,7 @@ static int read_first_frame(qmdata_t *data) {
 /******************************************************
  *
  * Reads the info printed after the geometry search
- * has finished or whatever analysis was done in a 
+ * has finished or whatever analysis was done in a
  * single point run, e.g. ESP charges, Hessian, etc.
  * Rewinds to the beginning of the search when done,
  * because we read this part at in the initial phase
@@ -2157,7 +2157,7 @@ static int get_final_properties(qmdata_t *data) {
 
   if (get_esp_charges(data)) {
     printf("gamessplugin) ESP charges found\n");
-  } 
+  }
 
   if (data->runtype == MOLFILE_RUNTYPE_GRADIENT ||
       data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
@@ -2172,7 +2172,7 @@ static int get_final_properties(qmdata_t *data) {
      * cartesian coordinates as well as the internal
      * coordinates together with their associated
      * force constants */
-    
+
     if (!get_int_hessian(data)) {
       printf("gamessplugin) No internal Hessian matrix found.\n");
     }
@@ -2183,7 +2183,7 @@ static int get_final_properties(qmdata_t *data) {
       printf("gamessplugin) \n");
     }
 
-    /* read the wavenumbers, intensities of the normal modes 
+    /* read the wavenumbers, intensities of the normal modes
      * as well as the modes themselves */
     if (!get_normal_modes(data)) {
       printf("gamessplugin) \n");
@@ -2197,7 +2197,7 @@ static int get_final_properties(qmdata_t *data) {
 
 
   fseek(data->file, filepos, SEEK_SET);
-  return TRUE; 
+  return TRUE;
 }
 
 
@@ -2246,7 +2246,7 @@ static int read_localized_orbitals(qmdata_t *data) {
 /********************************************************
  *
  * Read basis set and orbital statistics such as
- * # of shells, # of A/B orbitals, # of electrons, 
+ * # of shells, # of A/B orbitals, # of electrons,
  * multiplicity and total charge
  *
  ********************************************************/
@@ -2297,12 +2297,12 @@ static int get_basis_stats(qmdata_t *data) {
        * due to "(ALPHA)" and "(BETA )" !! */
       GET_LINE(buffer, data->file);
       sscanf(buffer,"%*s %*s %*s %*s %*s %*s %d",
-             &(data->num_occupied_A)); 
-        
+             &(data->num_occupied_A));
+
       /* number of B orbitals */
       GET_LINE(buffer, data->file);
       sscanf(buffer,"%*s %*s %*s %*s %*s %*s %*s %d",
-             &(data->num_occupied_B)); 
+             &(data->num_occupied_B));
 
   }
   else {
@@ -2339,12 +2339,12 @@ static int get_basis_stats(qmdata_t *data) {
        * due to "(ALPHA)" and "(BETA )" !! */
       GET_LINE(buffer, data->file);
       sscanf(buffer,"%*s %*s %*s %*s %*s %*s %d",
-             &(data->num_occupied_A)); 
-        
+             &(data->num_occupied_A));
+
       /* number of B orbitals */
       GET_LINE(buffer, data->file);
       sscanf(buffer,"%*s %*s %*s %*s %*s %*s %*s %d",
-             &(data->num_occupied_B)); 
+             &(data->num_occupied_B));
   }
 
 
@@ -2363,7 +2363,7 @@ static int get_basis_stats(qmdata_t *data) {
   printf("gamessplugin) Number of gaussian basis functions: %d \n",\
       data->wavef_size);
 
- 
+
   return TRUE;
 }
 
@@ -2429,7 +2429,7 @@ int get_basis(qmdata_t *data) {
 
   char buffer[BUFSIZ];
   char word[4][BUFSIZ];
-  int i = 0; 
+  int i = 0;
   int success = 0;
   int numread, numshells;
   shell_t *shell;
@@ -2448,7 +2448,7 @@ int get_basis(qmdata_t *data) {
   }
 
   /* Search for "ATOMIC BASIS SET" line */
-  if (pass_keyline(data->file, "ATOMIC BASIS SET", 
+  if (pass_keyline(data->file, "ATOMIC BASIS SET",
                     "$CONTRL OPTIONS") !=FOUND ) {
     printf("gamessplugin) No basis set found!\n");
 
@@ -2458,7 +2458,7 @@ int get_basis(qmdata_t *data) {
   /* initialize buffers */
   buffer[0] = '\0';
   for (i=0; i<3; i++) word[i][0] = '\0';
-  
+
 
   /* skip the next 5 lines */
   eatline(data->file, 5);
@@ -2478,7 +2478,7 @@ int get_basis(qmdata_t *data) {
     int icoeff = 0;
     filepos = ftell(data->file);
     GET_LINE(buffer, data->file);
-      
+
     /* Count the number of relevant words in the line. */
     numread = sscanf(buffer,"%s %s %s %s",&word[0][0], &word[1][0],
            &word[2][0], &word[3][0]);
@@ -2492,7 +2492,7 @@ int get_basis(qmdata_t *data) {
         eatline(data->file, 1);
 
         /* read the basis set for the current atom */
-        shell = (shell_t*)calloc(1, sizeof(shell_t)); 
+        shell = (shell_t*)calloc(1, sizeof(shell_t));
         numshells = 0;
 
         do {
@@ -2501,11 +2501,11 @@ int get_basis(qmdata_t *data) {
 
           if (numprim>0) {
             /* make sure we have eiter S, L, P, D, F or G shells */
-            if ( (shelltype!='S' && shelltype!='L' && shelltype!='P' && 
+            if ( (shelltype!='S' && shelltype!='L' && shelltype!='P' &&
                   shelltype!='D' && shelltype!='F' && shelltype!='G') ) {
               printf("gamessplugin) WARNING ... %c shells are not supported \n", shelltype);
             }
-            
+
             /* create new shell */
             if (numshells) {
               shell = (shell_t*)realloc(shell, (numshells+1)*sizeof(shell_t));
@@ -2549,7 +2549,7 @@ int get_basis(qmdata_t *data) {
         /* this is the very end of the basis set */
         if(gms->have_pcgamess){
             if (!strcmp(&word[0][0],"TOTAL")  &&
-                !strcmp(&word[1][0],"NUMBER") && 
+                !strcmp(&word[1][0],"NUMBER") &&
                 !strcmp(&word[2][0],"OF")     &&
                 !strcmp(&word[3][0],"SHELLS")) {
               success = 1;
@@ -2560,7 +2560,7 @@ int get_basis(qmdata_t *data) {
         }
         else {
             if (!strcmp(&word[0][0],"TOTAL")  &&
-                !strcmp(&word[1][0],"NUMBER") && 
+                !strcmp(&word[1][0],"NUMBER") &&
                 !strcmp(&word[2][0],"OF")     &&
                 !strcmp(&word[3][0],"BASIS")) {
               success = 1;
@@ -2651,12 +2651,12 @@ static int fill_basis_arrays(qmdata_t *data) {
   }
 
   /* reserve space for pointer to array containing basis
-   * info, i.e. contraction coeficients and expansion 
+   * info, i.e. contraction coeficients and expansion
    * coefficients; need 2 entries per basis function, i.e.
    * exponent and contraction coefficient; also,
    * allocate space for the array holding the orbital symmetry
    * information per primitive Gaussian.
-   * Finally, initialize the arrays holding the number of 
+   * Finally, initialize the arrays holding the number of
    * shells per atom and the number of primitives per shell*/
   basis = (float *)calloc(2*primcount,sizeof(float));
 
@@ -2667,10 +2667,10 @@ static int fill_basis_arrays(qmdata_t *data) {
   }
 
   shell_types = (int *)calloc(data->num_shells, sizeof(int));
-  
+
   /* make sure memory was allocated properly */
   if (shell_types == NULL) {
-    PRINTERR; 
+    PRINTERR;
     return FALSE;
   }
 
@@ -2678,7 +2678,7 @@ static int fill_basis_arrays(qmdata_t *data) {
 
   /* make sure memory was allocated properly */
   if (num_shells_per_atom == NULL) {
-    PRINTERR; 
+    PRINTERR;
     return FALSE;
   }
 
@@ -2707,7 +2707,7 @@ static int fill_basis_arrays(qmdata_t *data) {
   data->atomicnum_per_basisatom = atomicnum_per_basisatom;
 
   /* Go through all basis set atoms and try to assign the
-   * atomic numbers. The basis set atoms are specified by 
+   * atomic numbers. The basis set atoms are specified by
    * name strings (the same as in the coordinate section,
    * except for FMO calcs.) and we try to match the names
    * from the two lists. The basis set atom list is symmetry
@@ -2756,7 +2756,7 @@ static int fill_basis_arrays(qmdata_t *data) {
       }
       shellcount++;
     }
-  } 
+  }
 
   return TRUE;
 }
@@ -2770,7 +2770,7 @@ static int fill_basis_arrays(qmdata_t *data) {
 static int read_shell_primitives(qmdata_t *data, prim_t **prim, char *shelltype,
                                  int icoeff, int pcgamess) {
   char buffer[BUFSIZ];
-  float exponent = 0.0; 
+  float exponent = 0.0;
   float contract[2] = {0.0, 0.0};
   int shell, success;
   int primcounter = 0;
@@ -2781,14 +2781,14 @@ static int read_shell_primitives(qmdata_t *data, prim_t **prim, char *shelltype,
       if (pcgamess)
         success = sscanf(buffer,"%d %c %*s %f %f %*s %*s %f", &shell,
                        shelltype,
-                       &exponent, &contract[0], &contract[1]); 
+                       &exponent, &contract[0], &contract[1]);
 
       else
         success = sscanf(buffer,"%d %c %*s %f %f %f", &shell,
                        shelltype,
-                       &exponent, &contract[0], &contract[1]); 
+                       &exponent, &contract[0], &contract[1]);
 
-    /* store in basis array and increase the counter */ 
+    /* store in basis array and increase the counter */
     switch (success) {
       case 4:
         if (primcounter) {
@@ -2797,10 +2797,10 @@ static int read_shell_primitives(qmdata_t *data, prim_t **prim, char *shelltype,
 
         /* store exponent */
         (*prim)[primcounter].exponent = exponent;
-          
+
         /* store coefficient */
         (*prim)[primcounter].contraction_coeff = contract[0];
-        
+
         primcounter++;
         break;
 
@@ -2811,10 +2811,10 @@ static int read_shell_primitives(qmdata_t *data, prim_t **prim, char *shelltype,
 
         /* store exponent */
         (*prim)[primcounter].exponent = exponent;
-          
+
         /* store coefficient */
         (*prim)[primcounter].contraction_coeff = contract[icoeff];
-        
+
         primcounter++;
         break;
 
@@ -2876,7 +2876,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
     if (pass_keyline(data->file, "HAS ENERGY VALUE",
                      "...... END OF ONE-ELECTRON INTEGRALS ......")
         == FOUND) {
-      /* Read the coordinate block following 
+      /* Read the coordinate block following
        * ---- SURFACE MAPPING GEOMETRY ---- */
       int i, n;
       for (i=0; i<natoms; i++) {
@@ -2894,7 +2894,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
       }
     }
     else {
-      /* Read the coordinate block following 
+      /* Read the coordinate block following
        * ATOM      ATOMIC                      COORDINATES (BOHR) */
       goto_keyline(data->file, "ATOM      ATOMIC", NULL);
       /* get the units */
@@ -2902,7 +2902,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
       sscanf(buffer, " ATOM      ATOMIC                      COORDINATES %s", word);
       units = !strcmp(word, "(BOHR)");
       eatline(data->file, 1);
-      
+
       if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
         printf("gamessplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
       }
@@ -2953,7 +2953,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
 
   /* Read population analysis (Mulliken and Lowdin charges)
    * only if wasn't read already while parsing the final
-   * property section. Otherwise we would potentially 
+   * property section. Otherwise we would potentially
    * overwrite the data with empty fields. */
   if (!cur_ts->have_mulliken &&
       get_population(data, cur_ts)) {
@@ -3009,9 +3009,9 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
       sscanf(buffer, " NUMBER OF STATES REQUESTED = %d", &numstates);
       printf("gamessplugin) Number of CIS states = %d\n", numstates);
 
-      /* For CIS only the wavefunction for the excited state 
+      /* For CIS only the wavefunction for the excited state
        * (specified by IROOT in $CIS group) will be printed.
-       * Here we read in the energies for all states, and store 
+       * Here we read in the energies for all states, and store
        * the energy for the selected state in its wavefunction */
       state_energies  = calloc(numstates+1, sizeof(float));
       state_spinquant = calloc(numstates+1, sizeof(float));
@@ -3037,7 +3037,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
       sscanf(buffer,
              " CIS NATURAL ORBITAL OCCUPATION NUMBERS FOR EXCITED STATE %d",
              &state);
-      
+
       wave_ci = add_wavefunction(cur_ts);
 
       if (get_wavefunction(data, cur_ts, wave_ci) == FALSE) {
@@ -3069,14 +3069,14 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   if ((data->runtype == MOLFILE_RUNTYPE_OPTIMIZE ||
        data->runtype == MOLFILE_RUNTYPE_SADPOINT) &&
       (data->num_frames_read+1 == data->num_frames &&
-       (data->status == MOLFILE_QMSTATUS_UNKNOWN || 
+       (data->status == MOLFILE_QMSTATUS_UNKNOWN ||
         data->status == MOLFILE_QMSTATUS_OPT_CONV ||
         data->status == MOLFILE_QMSTATUS_OPT_NOT_CONV))) {
 
-    /* We need to jump over the end of the trajectory because 
+    /* We need to jump over the end of the trajectory because
      * this is also the keystring for get_wavefunction() to
      * bail out. */
-    if (data->status == MOLFILE_QMSTATUS_OPT_CONV || 
+    if (data->status == MOLFILE_QMSTATUS_OPT_CONV ||
         data->status == MOLFILE_QMSTATUS_OPT_NOT_CONV) {
       fseek(data->file, data->end_of_traj, SEEK_SET);
     }
@@ -3092,7 +3092,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
 
   /* For MCSCF optimized orbitals no occupancies are given
    * but since their occupancies are identical to the ones
-   * from natural orbitals we can use those. The natural 
+   * from natural orbitals we can use those. The natural
    * orbitals are always listed right before the optimized
    * ones so we simply copy the data over. */
   if (cur_ts->numwave>=2 &&
@@ -3103,7 +3103,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
     qm_wavefunction_t *wavenat = &cur_ts->wave[cur_ts->numwave-2];
     waveopt->orb_occupancies = (float *)calloc(waveopt->num_orbitals,
                                                sizeof(float));
-    /* Only the core and active natural orbitals are listed. 
+    /* Only the core and active natural orbitals are listed.
      * We copy the occupancies for these orbitals and pad the
      * rest with zeros. */
     for (i=0; i<wavenat->num_orbitals; i++) {
@@ -3147,7 +3147,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
     GET_LINE(buffer, data->file);
     sscanf(buffer, "OPTTOL = %f", &data->opt_tol);
 
-    /* The $STATP options are followed by the coordinates 
+    /* The $STATP options are followed by the coordinates
      * but we can skip them here because we rewind after
      * get_guess_options() and try to read them in
      * get_traj_frame(). */
@@ -3155,7 +3155,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
   else if (data->runtype==MOLFILE_RUNTYPE_SURFACE) {
     if (pass_keyline(data->file,
                      "POTENTIAL SURFACE MAP INPUT", NULL)) {
-      
+
       int coord1[2];
       int mplevel1=-1, mplevel2=-1, nstep1;
       float origin1, disp1;
@@ -3166,7 +3166,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
       char cctype1[BUFSIZ],  cctype2[BUFSIZ];
       char *tmp;
       int n;
-        
+
       eatline(data->file, 1);
 
       GET_LINE(buffer, data->file);
@@ -3238,7 +3238,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
     /* Allocate memory for the frame */
     data->qm_timestep = (qm_timestep_t *)calloc(1, sizeof(qm_timestep_t));
     memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
-    
+
     return TRUE;
   }
 
@@ -3286,7 +3286,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
                           "---- SURFACE MAPPING GEOMETRY ----") ||
              have_keyline(data->file, "... DONE WITH POTENTIAL SURFACE SCAN",
                           "---- SURFACE MAPPING GEOMETRY ----"))) {
-          data->num_frames++;          
+          data->num_frames++;
         }
       }
       else if (pass_keyline(data->file, "COORDINATES OF",
@@ -3321,7 +3321,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
       }
     }
   }
-  
+
   data->end_of_traj = ftell(data->file);
   fseek(data->file, filepos, SEEK_SET);
 
@@ -3341,7 +3341,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
 
   if (data->status == MOLFILE_QMSTATUS_SCF_NOT_CONV ||
       data->status == MOLFILE_QMSTATUS_FILE_TRUNCATED) {
-    return FALSE;  
+    return FALSE;
   }
 
   return TRUE;
@@ -3351,7 +3351,7 @@ static int analyze_traj(qmdata_t *data, gmsdata *gms) {
 /***************************************************************
  *
  * Read the number of scf iterations and the scf energies
- * for the current timestep. 
+ * for the current timestep.
  * Assumes that the file pointer is somewhere before this:
  * ITER EX DEM     TOTAL ENERGY        E CHANGE  DENSITY CHANGE    DIIS ERROR
  * 1  0  0      -39.7266993475   -39.7266993475   0.000000118   0.000000000
@@ -3389,7 +3389,7 @@ static int get_scfdata(qmdata_t *data, qm_timestep_t *ts) {
   for (i=0; i<numread; i++) {
     if (!strcmp(&word[i][0], "TOTAL")) epos = i+1;
   }
-   
+
   if (epos<0) {
     fseek(data->file, filepos, SEEK_SET);
     ts->num_scfiter = 0;
@@ -3412,11 +3412,11 @@ static int get_scfdata(qmdata_t *data, qm_timestep_t *ts) {
 
   /* go back and read energies */
   fseek(data->file, filepos, SEEK_SET);
-  
+
 
   /* allocate memory for scfenergy array */
   ts->scfenergies = (double *)calloc(numiter,sizeof(double));
-  
+
   i=0;
   do {
     GET_LINE(buffer, data->file);
@@ -3445,7 +3445,7 @@ static int get_scfdata(qmdata_t *data, qm_timestep_t *ts) {
 #endif
 
   ts->num_scfiter = numiter;
-  
+
   return TRUE;
 }
 
@@ -3463,7 +3463,7 @@ static int check_add_wavefunctions(qmdata_t *data,
   qm_wavefunction_t *wavef;
   int i, n=1;
 
-  if (data->scftype==MOLFILE_SCFTYPE_UHF || 
+  if (data->scftype==MOLFILE_SCFTYPE_UHF ||
       data->scftype==MOLFILE_SCFTYPE_GVB ||
       data->scftype==MOLFILE_SCFTYPE_MCSCF) {
     /* Try to read second wavefunction
@@ -3495,17 +3495,17 @@ static int check_add_wavefunctions(qmdata_t *data,
           strcat(spinstr, "spin alpha, ");
         }
       }
-      
+
       /* The last SCF energy is the energy of this electronic state */
       if (ts->scfenergies) {
         wavef->energy = ts->scfenergies[ts->num_scfiter-1];
       } else {
         wavef->energy = 0.f;
       }
-      
+
       /* Multiplicity */
       wavef->mult = data->multiplicity;
-      
+
 
       /* String telling wether wavefunction was added, updated
        * or ignored. */
@@ -3525,9 +3525,9 @@ static int check_add_wavefunctions(qmdata_t *data,
           }
         }
         if (found>=0) {
-          /* If the new wavefunction has more orbitals we 
+          /* If the new wavefunction has more orbitals we
            * replace the old one for this step. */
-          if (wavef->num_orbitals > 
+          if (wavef->num_orbitals >
               ts->wave[found].num_orbitals) {
             /* Replace existing wavefunction for this step */
             replace_wavefunction(ts, found);
@@ -3576,7 +3576,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
   for (i=0; i<6; i++) word[i][0] = '\0';
 
   if (wf == NULL) {
-    PRINTERR;	    
+    PRINTERR;
     return FALSE;
   }
 
@@ -3595,7 +3595,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
           ------------------
 
                       1          2          3          4          5
-                  -11.0297    -0.9121    -0.5205    -0.5205    -0.5205  <<-- orbital energies (or occupancies)                     A          A          A          A          A   
+                  -11.0297    -0.9121    -0.5205    -0.5205    -0.5205  <<-- orbital energies (or occupancies)                     A          A          A          A          A
     1  C  1  S    0.991925   0.221431   0.000006  -0.000001   0.000002
     2  C  1  S    0.038356  -0.627585  -0.000021   0.000003  -0.000006
     3  C  1  X    0.000000  -0.000004   0.338169  -0.030481  -0.460283
@@ -3603,7 +3603,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
 
                      6          7          8          9
                     0.7192     0.7192     0.7193     0.7611
-                     A          A          A          A   
+                     A          A          A          A
     1  C  1  S    0.000028   0.000012   0.000092   0.252320
     2  C  1  S   -0.000183  -0.000077  -0.000594  -1.632834
     3  C  1  X   -0.890147   0.062618   0.654017  -0.000154
@@ -3613,7 +3613,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
      ----------------------------------------------------------------
      PROPERTY VALUES FOR THE RHF   SELF-CONSISTENT FIELD WAVEFUNCTION
      ----------------------------------------------------------------
-  * 
+  *
   */
 
   /* Remember position in order to go back if no wave function was found */
@@ -3696,7 +3696,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
           strcmp(line, "***** EQUILIBRIUM GEOMETRY LOCATED *****") &&
           strcmp(line, "**** THE GEOMETRY SEARCH IS NOT CONVERGED! ****"));
 
-  /* If we reach the last line of the rhf section without finding 
+  /* If we reach the last line of the rhf section without finding
    * one of the keywords marking the beginning of a wavefunction
    * table then we return.*/
   if (wf->type==MOLFILE_WAVE_UNKNOWN) {
@@ -3711,21 +3711,21 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
    * energies. we reserve the max. space (num_orbitals==wavef_size)
    * for now and realloc later if, we have less orbitals. */
   wave_coeff = (float *)calloc(data->wavef_size*data->wavef_size,
-                                  sizeof(float)); 
+                                  sizeof(float));
   //printf("gamessplugin) wave_coeff() allocated\n");
 
   if (wave_coeff == NULL) {
-    PRINTERR;	    
+    PRINTERR;
     return FALSE;
   }
 
-  /* orbital energies/occupancies */  
+  /* orbital energies/occupancies */
   orb_enocc = (float *)calloc(data->wavef_size, sizeof(float));
   //printf("gamessplugin) orb_enocc() allocated\n");
 
   if (orb_enocc == NULL) {
     free(orb_enocc);
-    PRINTERR; 
+    PRINTERR;
     return FALSE;
   }
 
@@ -3786,14 +3786,14 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
     if (nr==num_values) have_orbenocc = 0;
 
     if (have_orbenocc) {
-      /* store the orbital energies in the appropriate arrays 
+      /* store the orbital energies in the appropriate arrays
        * read them until we encounter an empty string */
       for(i=0; i<num_values; i++) {
         orb_enocc[i] = enocc[i];
       }
-      
 
-      /* If we are in the first block we have to distinguish 
+
+      /* If we are in the first block we have to distinguish
          between energies and occupancies */
       if (wf->type  == MOLFILE_WAVE_MCSCFNAT &&
           orb_enocc == wf->orb_occupancies   &&
@@ -3806,7 +3806,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
 
       /* increase orbital energy pointer */
       orb_enocc = orb_enocc+5;
-    }      
+    }
     else {
       /* No orbital energies present, go back one line */
       fseek(data->file, filepos, SEEK_SET);
@@ -3871,13 +3871,13 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts,
     }
 
     wf->wave_coeffs  = (float *)realloc(wf->wave_coeffs, data->wavef_size*
-					num_orbitals*sizeof(float)); 
+					num_orbitals*sizeof(float));
   }
 
   /* In case MCSCF natural orbitals are present, then GAMESS
      prints the orbital energy for the core orbitals and the
      occupancy for the other orbitals. We zero out the non-core
-     energies to prevent confusion. The orbital occupancies 
+     energies to prevent confusion. The orbital occupancies
      are read separately elsewhere. */
   if (wf->type == MOLFILE_WAVE_MCSCFNAT &&
       wf->has_orben == TRUE ) {
@@ -3921,15 +3921,15 @@ static int read_coeff_block(FILE *file, int wavef_size,
     char type[BUFSIZ];
     float coeff[5];
     int num_values = 0;
-    
+
     GET_LINE(buffer, file);
-    
+
     /* read in the wavefunction coefficients for 5
      * orbitals at a time line by line */
-    num_values = sscanf(buffer,"%*5i%*4s%*2i%4s %f %f %f %f %f", 
+    num_values = sscanf(buffer,"%*5i%*4s%*2i%4s %f %f %f %f %f",
                         type, &coeff[0], &coeff[1], &coeff[2],
                         &coeff[3], &coeff[4]);
-    
+
     if (num_values==0) {
       /* The file must have been truncated! */
       truncated = 1;
@@ -3937,17 +3937,17 @@ static int read_coeff_block(FILE *file, int wavef_size,
     }
 
     angular_momentum_expon(&angular_momentum[3*i], type);
-   
-    /* Each orbital has data->wavef_size entries, 
-     * hence we have to use this number as offset when storing 
+
+    /* Each orbital has data->wavef_size entries,
+     * hence we have to use this number as offset when storing
      * them in groups of five. */
     for (j=0 ; j<num_values-1; j++) {
       wave_coeff[j*wavef_size+i] = coeff[j];
     }
   }
-  
+
   if (truncated) return 0;
-  
+
   return 1;
 }
 
@@ -3970,26 +3970,26 @@ static int get_population(qmdata_t *data, qm_timestep_t *ts) {
   }
 
   /* Read Mulliken charges if present */
-  ts->mulliken_charges = 
+  ts->mulliken_charges =
     (double *)calloc(data->numatoms, sizeof(double));
 
   if (!ts->mulliken_charges) {
-    PRINTERR; 
+    PRINTERR;
     return FALSE;
   }
 
-  ts->lowdin_charges = 
+  ts->lowdin_charges =
     (double *)calloc(data->numatoms, sizeof(double));
 
   if (!ts->lowdin_charges) {
     free(ts->mulliken_charges);
     ts->mulliken_charges = NULL;
-    PRINTERR; 
+    PRINTERR;
     return FALSE;
   }
-  
+
   eatline(data->file, 1);
-  
+
   for (i=0; i<data->numatoms; i++) {
     int n;
     float mullpop, mullcharge, lowpop, lowcharge;
@@ -4023,7 +4023,7 @@ static int get_population(qmdata_t *data, qm_timestep_t *ts) {
 
 /* Read ESP charges.
  * XXX Right now we don't distinguish between different type of
- * ESP-style charges (CHELPG, CONNOLLY, GEODESIC). 
+ * ESP-style charges (CHELPG, CONNOLLY, GEODESIC).
  * This could be solved by reading in the PTSEL keyword in
  * the $PDC group. */
 static int get_esp_charges(qmdata_t *data) {
@@ -4044,11 +4044,11 @@ static int get_esp_charges(qmdata_t *data) {
   }
 
   /* Read ESP charges if present */
-  ts->esp_charges = 
+  ts->esp_charges =
     (double *)calloc(data->numatoms, sizeof(double));
 
   if (ts->esp_charges == NULL) {
-    PRINTERR; 
+    PRINTERR;
     return FALSE;
   }
 
@@ -4064,7 +4064,7 @@ static int get_esp_charges(qmdata_t *data) {
   }
 
   if (i!=data->numatoms) {
-    
+
     return FALSE;
   }
 
@@ -4087,7 +4087,7 @@ static int get_gradient(qmdata_t *data, qm_timestep_t *ts) {
 
   /* look for GRADIENT section */
   if (goto_keyline(data->file, "GRADIENT (HARTREE",
-                "***** EQUILIBRIUM GEOMETRY LOCATED", 
+                "***** EQUILIBRIUM GEOMETRY LOCATED",
                 " BEGINNING GEOMETRY SEARCH", NULL) != FOUND) {
     fseek(data->file, filepos, SEEK_SET);
     return FALSE;
@@ -4098,7 +4098,7 @@ static int get_gradient(qmdata_t *data, qm_timestep_t *ts) {
   ts->gradient = (float *)calloc(3*data->numatoms, sizeof(float));
 
   if (ts->gradient == NULL) {
-    PRINTERR;	    
+    PRINTERR;
     fseek(data->file, filepos, SEEK_SET);
     return FALSE;
   }
@@ -4148,7 +4148,7 @@ static int get_final_gradient(qmdata_t *data, qm_timestep_t *ts) {
   ts->gradient = (float *)calloc(3*data->numatoms, sizeof(float));
 
   if (ts->gradient == NULL) {
-    PRINTERR;	    
+    PRINTERR;
     fseek(data->file, filepos, SEEK_SET);
     return FALSE;
   }
@@ -4187,7 +4187,7 @@ static int get_final_gradient(qmdata_t *data, qm_timestep_t *ts) {
 static int get_normal_modes(qmdata_t *data) {
   char buffer[BUFSIZ];
   int i = 0, k = 0, j = 0;
-  double entry[6]; 
+  double entry[6];
   char *token;
 
   if (!pass_keyline(data->file, "NORMAL COORDINATE ANALYSIS", NULL)) {
@@ -4197,30 +4197,30 @@ static int get_normal_modes(qmdata_t *data) {
   /* initialize array */
   memset(entry, 0, sizeof(entry));
 
-    
+
   /* allocate memory for arrays */
-  data->wavenumbers = 
+  data->wavenumbers =
     (float *)calloc(data->numatoms*3,sizeof(float));
   if (data->wavenumbers==NULL) {
     PRINTERR;
     return FALSE;
   }
 
-  data->intensities = 
+  data->intensities =
     (float *)calloc(data->numatoms*3,sizeof(float));
   if (data->intensities==NULL) {
     PRINTERR;
     return FALSE;
   }
 
-  data->imag_modes = 
+  data->imag_modes =
     (int *)calloc(data->numatoms*3,sizeof(int));
   if (data->imag_modes==NULL) {
     PRINTERR;
     return FALSE;
   }
 
-  data->normal_modes = 
+  data->normal_modes =
     (float *)calloc((data->numatoms*3)*(data->numatoms*3),
 		     sizeof(float));
   if (data->normal_modes==NULL) {
@@ -4247,14 +4247,14 @@ static int get_normal_modes(qmdata_t *data) {
     }
     GET_LINE(buffer, data->file);
 
-    /* Scan the frequencies; 
+    /* Scan the frequencies;
      * If there are imaginary modes present then the
      * frequency is followed by the 'I' which represents
      * an additional char token in the line. */
 
     /* Skip first token "FREQUENCY:" */
     token = strtok(buffer, " \t\r\n");
-    
+
     /* Walk through the remaining tokens */
     while ((token = strtok(NULL, " \t\r\n")) != NULL) {
       /* Check if token is 'I'.
@@ -4279,9 +4279,9 @@ static int get_normal_modes(qmdata_t *data) {
     GET_LINE(buffer, data->file);
     numread = sscanf(buffer,"%*s %*s %lf %lf %lf %lf %lf", &entry[0],
                      &entry[1], &entry[2], &entry[3], &entry[4]);
- 
+
     for (k=0; k<numread; k++) {
-      data->intensities[i*5+k] = entry[k]; 
+      data->intensities[i*5+k] = entry[k];
     }
 
     eatline(data->file, 1);
@@ -4294,7 +4294,7 @@ static int get_normal_modes(qmdata_t *data) {
              &entry[0], &entry[1], &entry[2], &entry[3], &entry[4]);
 
       for (j=0; j<numread; j++) {
-        data->normal_modes[3*k + (i*5+j)*3*data->numatoms] = 
+        data->normal_modes[3*k + (i*5+j)*3*data->numatoms] =
           entry[j];
       }
 
@@ -4314,7 +4314,7 @@ static int get_normal_modes(qmdata_t *data) {
                        &entry[1], &entry[2], &entry[3],&entry[4]);
 
       for (j=0; j<numread; j++) {
-        data->normal_modes[(3*k+2) + (i*5+j)*3*data->numatoms] = 
+        data->normal_modes[(3*k+2) + (i*5+j)*3*data->numatoms] =
           entry[j];
       }
     }
@@ -4322,7 +4322,7 @@ static int get_normal_modes(qmdata_t *data) {
 
 
   /* Chop unused part of imag_modes array */
-  data->imag_modes = 
+  data->imag_modes =
     (int *)realloc(data->imag_modes, data->nimag*sizeof(int));
 
 /*   free(token); */
@@ -4337,7 +4337,7 @@ static int get_normal_modes(qmdata_t *data) {
 
 /***********************************************************
  *
- * Read the cartesian hessian matrix 
+ * Read the cartesian hessian matrix
  * XXX Does not read blocks with less than 6 entries correctly!
  *
  * *********************************************************/
@@ -4345,7 +4345,7 @@ static int get_cart_hessian(qmdata_t *data)
 {
   char buffer[BUFSIZ];
   int i,j,k;
-  float entry[6]; 
+  float entry[6];
 
   buffer[0] = '\0';
   memset(entry, 0, sizeof(entry));
@@ -4366,15 +4366,15 @@ static int get_cart_hessian(qmdata_t *data)
   eatline(data->file, 5);
 
 
-  /* reserve memory for array; 
+  /* reserve memory for array;
    * NOTE: this is a lower triangular matrix, but for now
-   * we save it in an square matrix of dim(3Nx3N) to 
+   * we save it in an square matrix of dim(3Nx3N) to
    * facilitate element access */
-  data->carthessian = 
+  data->carthessian =
     (double *)calloc((data->numatoms*3)*(data->numatoms*3),
 		     sizeof(double));
 
-  
+
   /* make sure memory was allocated properly */
   if (data->carthessian == NULL) {
     PRINTERR;
@@ -4389,7 +4389,7 @@ static int get_cart_hessian(qmdata_t *data)
   for (i=0; i<(int)ceil(data->numatoms/2.f); i++) {
     for (j=0; j<(data->numatoms*3)-(i*6); j++) {
       GET_LINE(buffer, data->file);
- 
+
       if (j%3==0) {
         sscanf(buffer,"%*s %*s %*c %f %f %f %f %f %f",
                &entry[0],&entry[1],
@@ -4402,7 +4402,7 @@ static int get_cart_hessian(qmdata_t *data)
       }
 
 
-      /* save entries (lower triangular matrix) in a 
+      /* save entries (lower triangular matrix) in a
        * square matrix */
       for (k=0; k<=(j<5 ? j : 5); k++) {
         data->carthessian[(j+i*6)*3*data->numatoms + (k+i*6)] =
@@ -4420,9 +4420,9 @@ static int get_cart_hessian(qmdata_t *data)
 
   return TRUE;
 }
-  
-  
-  
+
+
+
 /***********************************************************
  *
  * Read the internal coordinates and rewind to the file
@@ -4456,7 +4456,7 @@ static int get_int_coords(qmdata_t *data) {
 
   /* scan the next line */
   GET_LINE(buffer, data->file);
-  n = sscanf(buffer,"%*s %s", word); 
+  n = sscanf(buffer,"%*s %s", word);
 
   /* read line by line */
   while (n!=-1) {
@@ -4479,7 +4479,7 @@ static int get_int_coords(qmdata_t *data) {
 
     /* scan next line */
     GET_LINE(buffer, data->file);
-    n = sscanf(buffer,"%*s %s", word); 
+    n = sscanf(buffer,"%*s %s", word);
   }
 
   /* now that we know the number of bonds, angles, etc.
@@ -4498,12 +4498,12 @@ static int get_int_coords(qmdata_t *data) {
 
 
   /* check if we have sufficient memory available */
-  if ( (data->bonds == NULL) || 
+  if ( (data->bonds == NULL) ||
        (data->angles == NULL) ||
-       (data->dihedrals == NULL) || 
-       (data->internal_coordinates == NULL)) 
+       (data->dihedrals == NULL) ||
+       (data->internal_coordinates == NULL))
   {
-    PRINTERR; 
+    PRINTERR;
     return FALSE;
   }
 
@@ -4513,7 +4513,7 @@ static int get_int_coords(qmdata_t *data) {
    * I drop all safety check since we went through
    * this part of the file already once and should
    * be good */
- 
+
   /* scan the STRETCHES */
   for (i=0; i<data->nbonds; i++) {
     GET_LINE(buffer, data->file);
@@ -4604,9 +4604,9 @@ static int get_int_hessian(qmdata_t *data) {
   }
 
   eatline(data->file, 3);
-  
+
   /* reserve memory for inthessian array */
-  data->inthessian = 
+  data->inthessian =
     (double *)calloc((data->nintcoords)*(data->nintcoords),
 		     sizeof(double));
 
@@ -4627,16 +4627,16 @@ static int get_int_hessian(qmdata_t *data) {
       int numread = 0;
 
       GET_LINE(buffer, data->file);
-      numread = sscanf(buffer,"%*d %lf %lf %lf %lf %lf", &hess[0], 
+      numread = sscanf(buffer,"%*d %lf %lf %lf %lf %lf", &hess[0],
              &hess[1], &hess[2], &hess[3], &hess[4]);
 
       /* save entries */
-      for (k=0; k<numread; k++) { 
+      for (k=0; k<numread; k++) {
         data->inthessian[j*data->nintcoords + i*5+k] = hess[k];
       }
     }
 
-    /* skip the two lines separating the matrix entries 
+    /* skip the two lines separating the matrix entries
      * and scan next line */
     eatline(data->file, 2);
 
@@ -4647,14 +4647,14 @@ static int get_int_hessian(qmdata_t *data) {
   /* read the remaining block with less then 5 rows
    * if present */
   remaining_blocks = data->nintcoords%5;
-  
+
   if (remaining_blocks!=0) {
     for (j=0; j<data->nintcoords; j++) {
       GET_LINE(buffer, data->file);
-      sscanf(buffer,"%*d %lf %lf %lf %lf %lf", &hess[0], 
+      sscanf(buffer,"%*d %lf %lf %lf %lf %lf", &hess[0],
              &hess[1], &hess[2], &hess[3], &hess[4]);
 
-      for (k=0; k<remaining_blocks; k++) { 
+      for (k=0; k<remaining_blocks; k++) {
         *(data->inthessian+(j*data->nintcoords)+(i*5)+k) = hess[k];
       }
     }
@@ -4664,13 +4664,13 @@ static int get_int_hessian(qmdata_t *data) {
   printf("gamessplugin) Scanned Hessian in INTERNAL coordinates\n");
 
   /* finally, dump the diagonal elements of the hessian into the
-   * force constant arrays, after converting the units 
+   * force constant arrays, after converting the units
    * appropriately;
    * BONDS are in HARTREE/BOHR**2
    * ANGLES,DIHEDRALS,IMPROPERS are in HARTREE/RADIAN**2 */
-  
+
   /* allocate dynamic arrays */
-  data->bond_force_const = 
+  data->bond_force_const =
     (double *)calloc(data->nbonds, sizeof(double));
 
   if (data->bond_force_const==NULL) {
@@ -4707,31 +4707,31 @@ static int get_int_hessian(qmdata_t *data) {
 
   /* scan the bonds */
   for (i=0; i<data->nbonds; i++) {
-    data->bond_force_const[i] = 
-      data->inthessian[(i*data->nintcoords)+i] * 
+    data->bond_force_const[i] =
+      data->inthessian[(i*data->nintcoords)+i] *
       HARTREE_TO_KCAL / BOHR_TO_ANGS / BOHR_TO_ANGS;
 
-    printf("%3d (BOND) %2d - %2d : %f\n", i, 
+    printf("%3d (BOND) %2d - %2d : %f\n", i,
            data->bonds[2*i], data->bonds[2*i+1],
            data->bond_force_const[i]);
   }
-  
+
   /* scan the angles */
   for (j=i; j<i+(data->nangles); j++) {
-    data->angle_force_const[j-i] = 
+    data->angle_force_const[j-i] =
       data->inthessian[j*data->nintcoords + j] * HARTREE_TO_KCAL;
-    
+
     printf("%3d (ANGLE) %2d - %2d - %2d : %f\n", j,
-           data->angles[3*(j-i)], data->angles[3*(j-i)+1], 
-           data->angles[3*(j-i)+2], 
+           data->angles[3*(j-i)], data->angles[3*(j-i)+1],
+           data->angles[3*(j-i)+2],
            data->angle_force_const[j-i]);
   }
 
   /* scan the dihedrals */
   for (k=j; k<j+(data->ndiheds); k++) {
-    data->dihedral_force_const[k-j] = 
+    data->dihedral_force_const[k-j] =
       data->inthessian[k*data->nintcoords + k] * HARTREE_TO_KCAL;
-    
+
     printf("%3d (DIHEDRAL) %2d - %2d - %2d - %2d : %f \n", k,
            data->dihedrals[4*(k-j)  ], data->dihedrals[4*(k-j)+1],
            data->dihedrals[4*(k-j)+2], data->dihedrals[4*(k-j)+3],
@@ -4740,9 +4740,9 @@ static int get_int_hessian(qmdata_t *data) {
 
   /* scan the impropers */
   for (l=k; l<k+(data->nimprops); l++) {
-    data->improper_force_const[l-k] = 
+    data->improper_force_const[l-k] =
       data->inthessian[l*data->nintcoords + l] * HARTREE_TO_KCAL;
-    
+
     printf("%3d (IMPROPERS) %2d - %2d - %2d - %2d : %f \n", l,
            data->impropers[4*(l-k)  ], data->impropers[4*(l-k)+1],
            data->impropers[4*(l-k)+2], data->impropers[4*(l-k)+3],
@@ -4760,7 +4760,7 @@ static int get_int_hessian(qmdata_t *data) {
  *
  * this function animates a given normal mode by means of
  * generating mod_num_frames frames away from the equilibrium
- * structure in a direction given by the hessiane 
+ * structure in a direction given by the hessiane
  *
  ************************************************************/
 static int animate_normal_mode(qmdata_t *data, int mode)
@@ -4768,7 +4768,7 @@ static int animate_normal_mode(qmdata_t *data, int mode)
   mode_data *animated_mode = data->animated_mode;
   float *normal_modes = data->normal_modes;
   float scale = animated_mode->mode_scaling;
-  int i = 0, k = 0; 
+  int i = 0, k = 0;
   int l = 0, m = 0;
   int natoms = data->numatoms;
   int num_frames = animated_mode->mode_num_frames;
@@ -4778,16 +4778,16 @@ static int animate_normal_mode(qmdata_t *data, int mode)
   {
     for ( i = 0; i < natoms; ++i)
     {
-      *(animated_mode->mode_frames+(k*natoms*3)+(3*i)) = 
-	  (data->atoms+i)->x * (1+( k*scale * 
+      *(animated_mode->mode_frames+(k*natoms*3)+(3*i)) =
+	  (data->atoms+i)->x * (1+( k*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i)))));
 
-      *(animated_mode->mode_frames+(k*natoms*3)+(3*i+1)) = 
-	  (data->atoms+i)->y * (1+( k*scale * 
+      *(animated_mode->mode_frames+(k*natoms*3)+(3*i+1)) =
+	  (data->atoms+i)->y * (1+( k*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i+1)))));
 
-      *(animated_mode->mode_frames+(k*natoms*3)+(3*i+2)) = 
-	  (data->atoms+i)->z * (1+( k*scale * 
+      *(animated_mode->mode_frames+(k*natoms*3)+(3*i+2)) =
+	  (data->atoms+i)->z * (1+( k*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i+2)))));
     }
   }
@@ -4798,16 +4798,16 @@ static int animate_normal_mode(qmdata_t *data, int mode)
   {
     for ( i = 0; i < natoms; ++i)
     {
-      *(animated_mode->mode_frames+((l+k)*natoms*3)+(3*i)) = 
-	  (data->atoms+i)->x * (1+((int)(num_frames-l)*scale * 
+      *(animated_mode->mode_frames+((l+k)*natoms*3)+(3*i)) =
+	  (data->atoms+i)->x * (1+((int)(num_frames-l)*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i)))));
 
-      *(animated_mode->mode_frames+((l+k)*natoms*3)+(3*i+1)) = 
-	  (data->atoms+i)->y * (1+((int)(num_frames-l)*scale * 
+      *(animated_mode->mode_frames+((l+k)*natoms*3)+(3*i+1)) =
+	  (data->atoms+i)->y * (1+((int)(num_frames-l)*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i+1)))));
 
-      *(animated_mode->mode_frames+((l+k)*natoms*3)+(3*i+2)) = 
-	  (data->atoms+i)->z * (1+((int)(num_frames-l)*scale * 
+      *(animated_mode->mode_frames+((l+k)*natoms*3)+(3*i+2)) =
+	  (data->atoms+i)->z * (1+((int)(num_frames-l)*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i+2)))));
     }
   }
@@ -4818,16 +4818,16 @@ static int animate_normal_mode(qmdata_t *data, int mode)
   {
     for ( i = 0; i < natoms; ++i)
     {
-      *(animated_mode->mode_frames+((l+k+m)*natoms*3)+(3*i)) = 
-	  (data->atoms+i)->x * (1+((int)(m-num_frames)*scale * 
+      *(animated_mode->mode_frames+((l+k+m)*natoms*3)+(3*i)) =
+	  (data->atoms+i)->x * (1+((int)(m-num_frames)*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i)))));
 
-      *(animated_mode->mode_frames+((l+k+m)*natoms*3)+(3*i+1)) = 
-	  (data->atoms+i)->y * (1+((int)(m-num_frames)*scale * 
+      *(animated_mode->mode_frames+((l+k+m)*natoms*3)+(3*i+1)) =
+	  (data->atoms+i)->y * (1+((int)(m-num_frames)*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i+1)))));
 
-      *(animated_mode->mode_frames+((l+k+m)*natoms*3)+(3*i+2)) = 
-	  (data->atoms+i)->z * (1+((int)(m-num_frames)*scale * 
+      *(animated_mode->mode_frames+((l+k+m)*natoms*3)+(3*i+2)) =
+	  (data->atoms+i)->z * (1+((int)(m-num_frames)*scale *
 	  (*(normal_modes+(mode*natoms*3)+(3*i+2)))));
     }
   }
@@ -4842,7 +4842,7 @@ static int animate_normal_mode(qmdata_t *data, int mode)
 
 /*************************************************************
  *
- * plugin registration 
+ * plugin registration
  *
  **************************************************************/
 static molfile_plugin_t plugin;
