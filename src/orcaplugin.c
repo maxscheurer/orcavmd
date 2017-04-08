@@ -32,6 +32,9 @@ Inspired from gamessplugin.c
 #define FOUND    1
 #define STOPPED  2
 
+#define ORCA4 4
+#define ORCA3 3
+
 /* ######################################################## */
 /*                 orca specific struct                     */
 /*
@@ -44,6 +47,7 @@ typedef struct {
                 * version = 1 : version 3.0.0, 3.0.1, 3.0.3
                 * version = 2 : version 4.0.0
                 */
+  int digits[3];
 } orcadata;
 
 
@@ -68,7 +72,7 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
   qmdata_t *data = NULL;
 
   #ifdef DEBUGGING
-    printf("Open Orca Read called: %s\n", filename);
+    printf("DEBUG: Open Orca Read called: %s\n", filename);
   #endif
 
   orcadata* orca;
@@ -99,7 +103,13 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
   data->file = fd;
 
   if(have_orca(data, orca)) {
-
+    if (orca->version != 0) {
+      printf("orcaplugin) Orca version: %d.%d.%d \n", orca->digits[0],
+    orca->digits[1],orca->digits[2]);
+    } else {
+      printf("orcaplugin) Orca version not supported: %d.%d.%d \n", orca->digits[0],
+    orca->digits[1],orca->digits[2]);
+    }
   } else {
     printf("orcaplugin) This is not an Orca output file!\n");
     return NULL;
@@ -121,10 +131,42 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
 
 static int have_orca(qmdata_t *data, orcadata* orca) {
   int programLine;
+  int versionLine;
+  char buffer[BUFSIZ];
+  int mainVersion, secondDigit, thirdDigit;
+  buffer[0] = '\0';
   programLine = goto_keyline(data->file, "O   R   C   A", NULL);
   if (programLine != 1) {
     return FALSE;
   }
+
+  versionLine = goto_keyline(data->file, "Program Version", NULL);
+  // thisline(data->file);
+  GET_LINE(buffer, data->file);
+  if (strstr(buffer,"Version") != NULL) {
+    sscanf(buffer, "%*s %*s %d.%d.%d", &mainVersion, &secondDigit, &thirdDigit);
+    #ifdef DEBUGGING
+      printf("DEBUG: build: %d.%d.%d\n", mainVersion, secondDigit, thirdDigit);
+    #endif
+    int build[3] = { mainVersion, secondDigit, thirdDigit };
+    for (size_t i = 0; i < 3; i++) {
+        orca->digits[i] = build[i];
+    }
+    switch (mainVersion) {
+      case ORCA4:
+        orca->version = 2;
+      case ORCA3:
+        orca->version = 1;
+      default:
+        orca->version = 0;
+    }
+  } else {
+    PRINTERR;
+    return FALSE;
+  }
+
+
+
   return TRUE;
 }
 
