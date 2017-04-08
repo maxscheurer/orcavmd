@@ -249,7 +249,8 @@ static int get_input_structure(qmdata_t *data, orcadata *orca) {
 
   if (goto_keyline(data->file, "CARTESIAN COORDINATES (ANGSTROEM)", NULL)) {
     GET_LINE(buffer, data->file);
-    thisline(data->file);
+    // thisline(data->file);
+    // UNITS ARE ANGSTROEM
     bohr = 0;
     // sscanf()
   } else {
@@ -315,7 +316,7 @@ static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
 
     strncpy(atm->type, atname, sizeof(atm->type));
     atm->atomicnum = floor(atomicnum+0.5); /* nuclear charge */
-    printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
+    // printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
 
     /* if coordinates are in Bohr convert them to Angstrom */
     if (unit==BOHR) {
@@ -367,9 +368,9 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.read_qm_rundata  = read_orca_rundata;
 
 #if vmdplugin_ABIVERSION > 11
-  plugin.read_timestep_metadata    = read_timestep_metadata;
+  // plugin.read_timestep_metadata    = read_timestep_metadata;
 //   plugin.read_qm_timestep_metadata = read_qm_timestep_metadata;
-  plugin.read_timestep = read_timestep;
+  // plugin.read_timestep = read_timestep;
 #endif
 
   return VMDPLUGIN_SUCCESS;
