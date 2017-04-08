@@ -386,7 +386,6 @@ static int read_first_frame(qmdata_t *data) {
 
 
 
-
 /******************************************************
  *
  * this function extracts the trajectory information
@@ -407,13 +406,13 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   printf("orcaplugin) ============\n");
 
 
-  printf("nfread: %d \n", data->num_frames_read);
-  if (!data->filepos_array) {
-    printf("filepos array empty!!!\n");
-    return FALSE;
-  } else {
+  // debugging the trajectory reading file positions
+  // printf("nfread: %d \n", data->num_frames_read);
+  // if (!data->filepos_array) {
+  //   printf("filepos array empty!!!\n");
+  //   return FALSE;
+  // }
 
-  }
   fseek(data->file, data->filepos_array[data->num_frames_read], SEEK_SET);
 
   /*
@@ -593,7 +592,7 @@ static int analyze_traj(qmdata_t *data, orcadata *gms) {
     // if (pass_keyline(data->file,
     //                  "SCF IS UNCONVERGED, TOO MANY ITERATIONS",
     //                  "ENERGY COMPONENTS")==FOUND) {
-    //   printf("gamessplugin) SCF IS UNCONVERGED, TOO MANY ITERATIONS\n");
+    //   printf("orcaplugin) SCF IS UNCONVERGED, TOO MANY ITERATIONS\n");
     //   data->status = MOLFILE_QMSTATUS_SCF_NOT_CONV;
     // } else {
     //   data->status = MOLFILE_QMSTATUS_OPT_CONV;
@@ -610,7 +609,7 @@ static int analyze_traj(qmdata_t *data, orcadata *gms) {
     return TRUE;
   }
 
-  printf("gamessplugin) Analyzing trajectory...\n");
+  printf("orcaplugin) Analyzing trajectory...\n");
   data->status = MOLFILE_QMSTATUS_UNKNOWN;
 
   while (0) {
@@ -639,7 +638,7 @@ static int analyze_traj(qmdata_t *data, orcadata *gms) {
         strstr(line, "---- SURFACE MAPPING GEOMETRY") ||
         strstr(line, "MINIMUM ENERGY CROSSING POINT SEARCH") ||
         (data->runtype==MOLFILE_RUNTYPE_MEX && strstr(line, "NSERCH=")==line)) {
-      printf("gamessplugin) %s", line);
+      printf("orcaplugin) %s", line);
 
       if (data->num_frames > 0) {
         data->filepos_array = (long*)realloc(data->filepos_array,
@@ -673,13 +672,13 @@ static int analyze_traj(qmdata_t *data, orcadata *gms) {
     }
     else if (strstr(line, "***** EQUILIBRIUM GEOMETRY LOCATED") ||
              strstr(line, "... DONE WITH POTENTIAL SURFACE SCAN")) {
-      printf("gamessplugin) ==== End of trajectory (%d frames) ====\n",
+      printf("orcaplugin) ==== End of trajectory (%d frames) ====\n",
              data->num_frames);
       data->status = MOLFILE_QMSTATUS_OPT_CONV;
       break;
     }
     else if (strstr(line, "***** FAILURE TO LOCATE STATIONARY POINT,")) {
-      printf("gamessplugin) %s\n", line);
+      printf("orcaplugin) %s\n", line);
       if (strstr(strchr(line, ','), "SCF HAS NOT CONVERGED")) {
         data->status = MOLFILE_QMSTATUS_SCF_NOT_CONV;
         break;
@@ -738,7 +737,7 @@ static int read_qm_timestep_metadata(void *mydata,
     have = 1;
   }
   else if (data->num_frames_read < data->num_frames) {
-    printf("gamessplugin) Probing timestep %d\n", data->num_frames_read);
+    printf("orcaplugin) Probing timestep %d\n", data->num_frames_read);
 
     have = get_traj_frame(data, data->atoms, data->numatoms);
   }
@@ -849,7 +848,6 @@ static int read_timestep(void *mydata, int natoms,
        molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
 			 molfile_qm_timestep_t *qm_ts)
 {
-  printf("--- READING TIMESTEP --- \n");
   qmdata_t *data = (qmdata_t *)mydata;
   qm_timestep_t *cur_ts;
   int offset;
@@ -861,16 +859,14 @@ static int read_timestep(void *mydata, int natoms,
     return MOLFILE_ERROR;
   }
 
-  printf("copying coords.\n");
   /* copy the coordinates */
   for (i=0; i<natoms; i++) {
     ts->coords[3*i  ] = data->atoms[i].x;
     ts->coords[3*i+1] = data->atoms[i].y;
     ts->coords[3*i+2] = data->atoms[i].z;
-    printf("x: %f y: %f z: %f\n", data->atoms[i].x, data->atoms[i].y, data->atoms[i].z);
+    // printf("x: %f y: %f z: %f\n", data->atoms[i].x, data->atoms[i].y, data->atoms[i].z);
   }
 
-  // printf("ts pointer.\n");
   /* get a convenient pointer to the current qm timestep */
   // cur_ts = data->qm_timestep+data->num_frames_sent;
   //
@@ -1236,7 +1232,7 @@ static void print_input_data(qmdata_t *data) {
     }
   }
 #endif
-  printf("gamessplugin) =================================================================\n");
+  printf("orcaplugin) =================================================================\n");
   for (i=0; i<data->num_basis_atoms; i++) {
     printf("%-8s (%10s)\n\n", data->atoms[i].type, data->basis_set[i].name);
     printf("\n");

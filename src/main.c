@@ -146,9 +146,9 @@ int main(int argc, char *argv[]) {
     while (!(rc = cplugin->read_timestep(chandle, natoms, &timestep, NULL, NULL))) {
       nsteps++;
     // free(timestep.coords);
-      for (int i=0; i<natoms; i++) {
-        printf("step %d -- x: %f y: %f z: %f\n", nsteps, timestep.coords[3*i  ], timestep.coords[3*i+1], timestep.coords[3*i+2]);
-      }
+      // for (int i=0; i<natoms; i++) {
+      //   printf("step %d -- x: %f y: %f z: %f\n", nsteps, timestep.coords[3*i  ], timestep.coords[3*i+1], timestep.coords[3*i+2]);
+      // }
     }
     if (rc != MOLFILE_SUCCESS) {
       fprintf(stderr, "FAILED: read_next_timestep returned %d\n", rc);
