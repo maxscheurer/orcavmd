@@ -78,6 +78,16 @@ static int get_input_structure(qmdata_t *data, orcadata *orca);
 // reading coord block
 static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit, int *numatoms);
 
+// for VMD
+static int read_orca_metadata(void *mydata, molfile_qm_metadata_t *metadata);
+static int read_orca_rundata(void *mydata, molfile_qm_t *qm_data);
+
+static int read_timestep(void *mydata, int natoms,
+       molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
+			 molfile_qm_timestep_t *qm_ts);
+
+static int read_timestep_metadata(void *mydata, molfile_timestep_metadata_t *meta);
+
 /*************************************************************
  *
  * MAIN ORCA CODE PART
@@ -142,6 +152,29 @@ static int read_orca_structure(void *mydata, int *optflags, molfile_atom_t *atom
   qm_atom_t *cur_atom;
   molfile_atom_t *atom;
   int i = 0;
+  *optflags = MOLFILE_ATOMICNUMBER;
+
+  cur_atom = data->atoms;
+
+  for(i=0; i<data->numatoms; i++) {
+    atom = atoms+i;
+    strncpy(atom->name, cur_atom->type, sizeof(atom->name));
+    strncpy(atom->type, cur_atom->type, sizeof(atom->type));
+    strncpy(atom->resname,"", sizeof(atom->resname));
+    atom->resid = 1;
+    atom->chain[0] = '\0';
+    atom->segid[0] = '\0';
+    atom->atomicnumber = cur_atom->atomicnum;
+    #ifdef DEBUGGING
+    printf("orcaplugin) atomicnum[%d] = %d\n", i, atom->atomicnumber);
+    #endif
+
+    /* if (data->have_mulliken)
+    atom->charge = data->qm_timestep->mulliken_charges[i];
+    */
+    cur_atom++;
+  }
+
   return MOLFILE_SUCCESS;
 }
 
@@ -230,7 +263,7 @@ static int get_input_structure(qmdata_t *data, orcadata *orca) {
   if (get_coordinates(data->file, &data->atoms, bohr, &numatoms))
     data->num_frames_read = 0;
   else {
-    printf("gamessplugin) Bad atom coordinate block!\n");
+    printf("orcaplugin) Bad atom coordinate block!\n");
     return FALSE;
   }
 
@@ -330,14 +363,14 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.read_structure = read_orca_structure;
   plugin.close_file_read = close_orca_read;
   //
-  // plugin.read_qm_metadata = read_orca_metadata;
-  // plugin.read_qm_rundata  = read_orca_rundata;
+  plugin.read_qm_metadata = read_orca_metadata;
+  plugin.read_qm_rundata  = read_orca_rundata;
 
-// #if vmdplugin_ABIVERSION > 11
-//   plugin.read_timestep_metadata    = read_timestep_metadata;
+#if vmdplugin_ABIVERSION > 11
+  plugin.read_timestep_metadata    = read_timestep_metadata;
 //   plugin.read_qm_timestep_metadata = read_qm_timestep_metadata;
-//   plugin.read_timestep = read_timestep;
-// #endif
+  plugin.read_timestep = read_timestep;
+#endif
 
   return VMDPLUGIN_SUCCESS;
 }
@@ -349,6 +382,285 @@ VMDPLUGIN_API int VMDPLUGIN_register(void *v, vmdplugin_register_cb cb) {
 
 VMDPLUGIN_API int VMDPLUGIN_fini(void) {
   return VMDPLUGIN_SUCCESS;
+}
+
+
+#if vmdplugin_ABIVERSION > 11
+
+/***********************************************************
+ * Provide non-QM metadata for next timestep.
+ * Required by the plugin interface.
+ ***********************************************************/
+static int read_timestep_metadata(void *mydata,
+                                  molfile_timestep_metadata_t *meta) {
+  meta->count = -1;
+  meta->has_velocities = 0;
+
+  return MOLFILE_SUCCESS;
+}
+/***********************************************************
+ *
+ * This function provides the data of the next timestep.
+ * Here we actually don't read the data from file, that had
+ * to be done already upon calling read_timestep_metadata().
+ * Instead we copy the stuff from the local data structure
+ * into the one's provided by VMD.
+ *
+ ***********************************************************/
+static int read_timestep(void *mydata, int natoms,
+       molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
+			 molfile_qm_timestep_t *qm_ts)
+{
+  printf("READING TIMESTEP\n");
+  qmdata_t *data = (qmdata_t *)mydata;
+  qm_timestep_t *cur_ts;
+  int offset;
+  int i = 0;
+  int num_charge_sets = 0;
+
+  if (data->trajectory_done == TRUE) return MOLFILE_ERROR;
+
+  printf("copying coords.\n");
+  /* copy the coordinates */
+  for (i=0; i<natoms; i++) {
+    ts->coords[3*i  ] = data->atoms[i].x;
+    ts->coords[3*i+1] = data->atoms[i].y;
+    ts->coords[3*i+2] = data->atoms[i].z;
+  }
+
+    printf("ts pointer.\n");
+  /* get a convenient pointer to the current qm timestep */
+  cur_ts = data->qm_timestep+data->num_frames_sent;
+
+  /* store the SCF energies */
+  for (i=0; i<cur_ts->num_scfiter; i++) {
+    qm_ts->scfenergies[i] = cur_ts->scfenergies[i];
+  }
+
+  /* store gradients */
+  if (cur_ts->gradient) {
+    for (i=0; i<3*natoms; i++) {
+      qm_ts->gradient[i] = cur_ts->gradient[i];
+    }
+  }
+
+  /* store charge sets*/
+  if (cur_ts->have_mulliken) {
+    offset = num_charge_sets*data->numatoms;
+    for (i=0; i<data->numatoms; i++) {
+      qm_ts->charges[offset+i] = cur_ts->mulliken_charges[i];
+    }
+    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_MULLIKEN;
+    num_charge_sets++;
+  }
+
+  if (cur_ts->have_lowdin) {
+    offset = num_charge_sets*data->numatoms;
+    for (i=0; i<data->numatoms; i++) {
+      qm_ts->charges[offset+i] = cur_ts->lowdin_charges[i];
+    }
+    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_LOWDIN;
+    num_charge_sets++;
+  }
+  if (cur_ts->have_esp) {
+    offset = num_charge_sets*data->numatoms;
+    for (i=0; i<data->numatoms; i++) {
+      qm_ts->charges[offset+i] = cur_ts->esp_charges[i];
+    }
+    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_ESP;
+    num_charge_sets++;
+  }
+
+
+  /* store the wave function and orbital energies */
+  if (cur_ts->wave) {
+    for (i=0; i<cur_ts->numwave; i++) {
+      qm_wavefunction_t *wave = &cur_ts->wave[i];
+      qm_ts->wave[i].type         = wave->type;
+      qm_ts->wave[i].spin         = wave->spin;
+      qm_ts->wave[i].excitation   = wave->exci;
+      qm_ts->wave[i].multiplicity = wave->mult;
+      qm_ts->wave[i].energy       = wave->energy;
+      strncpy(qm_ts->wave[i].info, wave->info, MOLFILE_BUFSIZ);
+
+      if (wave->wave_coeffs) {
+        memcpy(qm_ts->wave[i].wave_coeffs, wave->wave_coeffs,
+               wave->num_orbitals*data->wavef_size*sizeof(float));
+      }
+      if (wave->orb_energies) {
+        memcpy(qm_ts->wave[i].orbital_energies, wave->orb_energies,
+               wave->num_orbitals*sizeof(float));
+      }
+      if (wave->has_occup) {
+        memcpy(qm_ts->wave[i].occupancies, wave->orb_occupancies,
+               wave->num_orbitals*sizeof(float));
+      }
+    }
+  }
+
+  if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
+      data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+    /* We have only a single point */
+    data->trajectory_done = TRUE;
+  }
+
+  data->num_frames_sent++;
+
+  return MOLFILE_SUCCESS;
+}
+#endif
+
+/*****************************************************
+ *
+ * provide VMD with the sizes of the QM related
+ * data structure arrays that need to be made
+ * available
+ *
+ *****************************************************/
+static int read_orca_metadata(void *mydata,
+    molfile_qm_metadata_t *metadata) {
+
+  qmdata_t *data = (qmdata_t *)mydata;
+
+  if (data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+    metadata->ncart = (3*data->numatoms);
+    metadata->nimag = data->nimag;
+
+    if (data->have_internals) {
+      metadata->nintcoords = data->nintcoords;
+    } else {
+      metadata->nintcoords = 0;
+    }
+  }
+  else {
+    metadata->ncart = 0;
+    metadata->nimag = 0;
+    metadata->nintcoords = 0;
+  }
+
+  /* orbital data */
+  metadata->num_basis_funcs = data->num_basis_funcs;
+  metadata->num_basis_atoms = data->num_basis_atoms;
+  metadata->num_shells      = data->num_shells;
+  metadata->wavef_size      = data->wavef_size;
+
+#if vmdplugin_ABIVERSION > 11
+  /* system and run info */
+  metadata->have_sysinfo = 1;
+
+  /* hessian info */
+  metadata->have_carthessian = data->have_cart_hessian;
+  metadata->have_inthessian  = data->have_int_hessian;
+
+  /* normal mode info */
+  metadata->have_normalmodes = data->have_normal_modes;
+#endif
+
+  return MOLFILE_SUCCESS;
+}
+
+
+/******************************************************
+ *
+ * Provide VMD with the static (i.e. non-trajectory)
+ * data. That means we are filling the molfile_plugin
+ * data structures.
+ *
+ ******************************************************/
+static int read_orca_rundata(void *mydata,
+                               molfile_qm_t *qm_data) {
+
+  qmdata_t *data = (qmdata_t *)mydata;
+  int i, j;
+  int ncart;
+  molfile_qm_hessian_t *hessian_data = &qm_data->hess;
+  molfile_qm_basis_t   *basis_data   = &qm_data->basis;
+  molfile_qm_sysinfo_t *sys_data     = &qm_data->run;
+
+  /* fill in molfile_qm_hessian_t */
+  if (data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+    ncart = 3*data->numatoms;
+
+    /* Hessian matrix in cartesian coordinates */
+    if (data->have_cart_hessian) {
+      for (i=0; i<ncart; i++) {
+        for (j=0; j<=i; j++) {
+          hessian_data->carthessian[ncart*i+j] = data->carthessian[ncart*i+j];
+          hessian_data->carthessian[ncart*j+i] = data->carthessian[ncart*i+j];
+        }
+      }
+    }
+
+    /* Hessian matrix in internal coordinates */
+    if (data->have_int_hessian) {
+      for (i=0; i<(data->nintcoords)*(data->nintcoords); i++) {
+        hessian_data->inthessian[i] = data->inthessian[i];
+      }
+    }
+
+    /* wavenumbers, intensities, normal modes */
+    if (data->have_normal_modes) {
+      for (i=0; i<ncart*ncart; i++) {
+        hessian_data->normalmodes[i] = data->normal_modes[i];
+      }
+      for (i=0; i<ncart; i++) {
+        hessian_data->wavenumbers[i] = data->wavenumbers[i];
+        hessian_data->intensities[i] = data->intensities[i];
+      }
+    }
+
+    /* imaginary modes */
+    for (i=0; i<data->nimag; i++) {
+      /*printf("imag_modes[%d]=%d\n", i, data->imag_modes[i]);*/
+      hessian_data->imag_modes[i] = data->imag_modes[i];
+    }
+  }
+
+  /* fill in molfile_qm_sysinfo_t */
+  sys_data->runtype = data->runtype;
+  sys_data->scftype = data->scftype;
+  sys_data->nproc   = data->nproc;
+  sys_data->num_electrons  = data->num_electrons;
+  sys_data->totalcharge    = data->totalcharge;
+  sys_data->num_occupied_A = data->num_occupied_A;
+  sys_data->num_occupied_B = data->num_occupied_B;
+  sys_data->status         = data->status;
+
+
+  strncpy(sys_data->basis_string, data->basis_string,
+          sizeof(sys_data->basis_string));
+
+  sys_data->memory = 0; /* XXX fixme */
+
+  strncpy(sys_data->runtitle, data->runtitle, sizeof(sys_data->runtitle));
+  strncpy(sys_data->geometry, data->geometry, sizeof(sys_data->geometry));
+  strncpy(sys_data->version_string, data->version_string,
+          sizeof(sys_data->version_string));
+
+#if vmdplugin_ABIVERSION > 11
+  /* fill in molfile_qm_basis_t */
+  if (data->num_basis_funcs) {
+    for (i=0; i<data->num_basis_atoms; i++) {
+      basis_data->num_shells_per_atom[i] = data->num_shells_per_atom[i];
+      basis_data->atomic_number[i] = data->atomicnum_per_basisatom[i];
+    }
+
+    for (i=0; i<data->num_shells; i++) {
+      basis_data->num_prim_per_shell[i] = data->num_prim_per_shell[i];
+      basis_data->shell_types[i] = data->shell_types[i];
+    }
+
+    for (i=0; i<2*data->num_basis_funcs; i++) {
+      basis_data->basis[i] = data->basis[i];
+    }
+
+    for (i=0; i<3*data->wavef_size; i++) {
+      basis_data->angular_momentum[i] = data->angular_momentum[i];
+    }
+  }
+#endif
+
+  return MOLFILE_SUCCESS;
 }
 
 

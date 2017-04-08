@@ -139,11 +139,11 @@ int main(int argc, char *argv[]) {
   }
 
   /* Read coordinates */
-  if (cplugin->read_next_timestep) {
+  if (cplugin->read_timestep) {
     timestep.velocities = NULL;
     int nsteps = 0;
     timestep.coords = (float *)malloc(3*natoms*sizeof(float));
-    while (!(rc = cplugin->read_next_timestep(chandle, natoms, &timestep)))
+    while (!(rc = cplugin->read_timestep(chandle, natoms, &timestep, NULL, NULL)))
       nsteps++;
     free(timestep.coords);
     if (rc != MOLFILE_SUCCESS) {
