@@ -61,8 +61,13 @@ typedef struct {
 // Checks if loaded file is really an Orca output file
 static int have_orca(qmdata_t *data, orcadata* orca);
 
+static int read_orca_structure(void *mydata, int *optflags, molfile_atom_t *atoms);
 
+// Freeing memory
+static void close_orca_read(void *mydata);
 
+// Function for reading timestep independent information: Main Parser
+static int parse_static_data(qmdata_t *, int *);
 
 /*************************************************************
  *
@@ -79,10 +84,6 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
   #endif
 
   orcadata* orca;
-
-  // THIS NEEDS TO BE REMOVED LATER!!!
-  *natoms = 0;
-  // !!!!
 
   // open the orca output files
   fd = fopen(filename, "rb");
@@ -114,6 +115,9 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
                                             orca->digits[1],orca->digits[2]);
       return NULL;
     }
+    if (parse_static_data(data, natoms) == FALSE) {
+      return NULL;
+    }
   } else {
     printf("orcaplugin) This is not an Orca output file!\n");
     return NULL;
@@ -122,14 +126,14 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
   return data;
 }
 
-// static int read_orca_structure(void *mydata, int *optflags, molfile_atom_t *atoms)
-// {
-//   qmdata_t *data = (qmdata_t *)mydata;
-//   qm_atom_t *cur_atom;
-//   molfile_atom_t *atom;
-//   int i = 0;
-//   return 0;
-// }
+static int read_orca_structure(void *mydata, int *optflags, molfile_atom_t *atoms)
+{
+  qmdata_t *data = (qmdata_t *)mydata;
+  qm_atom_t *cur_atom;
+  molfile_atom_t *atom;
+  int i = 0;
+  return MOLFILE_SUCCESS;
+}
 
 
 
@@ -177,6 +181,11 @@ static int have_orca(qmdata_t *data, orcadata* orca) {
   return TRUE;
 }
 
+static int parse_static_data(qmdata_t *data, int* natoms) {
+  *natoms = 3;
+  return TRUE;
+}
+
 /*************************************************************
  *
  * plugin registration
@@ -196,8 +205,8 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.is_reentrant = VMDPLUGIN_THREADUNSAFE;
   plugin.filename_extension = "orca";
   plugin.open_file_read = open_orca_read;
-  // plugin.read_structure = read_orca_structure;
-  // plugin.close_file_read = close_orca_read;
+  plugin.read_structure = read_orca_structure;
+  plugin.close_file_read = close_orca_read;
   //
   // plugin.read_qm_metadata = read_orca_metadata;
   // plugin.read_qm_rundata  = read_orca_rundata;
@@ -218,4 +227,71 @@ VMDPLUGIN_API int VMDPLUGIN_register(void *v, vmdplugin_register_cb cb) {
 
 VMDPLUGIN_API int VMDPLUGIN_fini(void) {
   return VMDPLUGIN_SUCCESS;
+}
+
+
+
+
+/**********************************************************
+ *
+ * close file and free memory
+ *
+ **********************************************************/
+ // move to top later...
+static void close_orca_read(void *mydata) {
+
+  qmdata_t *data = (qmdata_t *)mydata;
+  int i, j;
+  fclose(data->file);
+
+  free(data->atoms);
+  free(data->basis);
+  free(data->shell_types);
+  free(data->atomicnum_per_basisatom);
+  free(data->num_shells_per_atom);
+  free(data->num_prim_per_shell);
+  free(data->bonds);
+  free(data->angles);
+  free(data->dihedrals);
+  free(data->impropers);
+  free(data->internal_coordinates);
+  free(data->bond_force_const);
+  free(data->angle_force_const);
+  free(data->dihedral_force_const);
+  free(data->improper_force_const);
+  free(data->inthessian);
+  free(data->carthessian);
+  free(data->wavenumbers);
+  free(data->intensities);
+  free(data->normal_modes);
+  free(data->imag_modes);
+  free(data->angular_momentum);
+  free(data->filepos_array);
+
+  if (data->basis_set) {
+    for(i=0; i<data->num_basis_atoms; i++) {
+      for (j=0; j<data->basis_set[i].numshells; j++) {
+        free(data->basis_set[i].shell[j].prim);
+      }
+      free(data->basis_set[i].shell);
+    }
+    free(data->basis_set);
+  }
+
+  for (i=0; i<data->num_frames; i++) {
+    free(data->qm_timestep[i].scfenergies);
+    free(data->qm_timestep[i].gradient);
+    free(data->qm_timestep[i].mulliken_charges);
+    free(data->qm_timestep[i].lowdin_charges);
+    free(data->qm_timestep[i].esp_charges);
+    for (j=0; j<data->qm_timestep[i].numwave; j++) {
+      free(data->qm_timestep[i].wave[j].wave_coeffs);
+      free(data->qm_timestep[i].wave[j].orb_energies);
+      free(data->qm_timestep[i].wave[j].orb_occupancies);
+    }
+    free(data->qm_timestep[i].wave);
+  }
+  free(data->qm_timestep);
+  free(data->format_specific_data);
+  free(data);
 }
