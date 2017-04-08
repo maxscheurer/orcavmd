@@ -22,6 +22,9 @@ Inspired from gamessplugin.c
 #define PRINTERR (void)(0)
 #endif
 
+#define ANGSTROM 0
+#define BOHR     1
+
 /*
  * Error reporting macro for the multiple fgets calls in
  * the code
@@ -69,6 +72,12 @@ static void close_orca_read(void *mydata);
 // Function for reading timestep independent information: Main Parser
 static int parse_static_data(qmdata_t *, int *);
 
+// atom definitions & geometry
+static int get_input_structure(qmdata_t *data, orcadata *orca);
+
+// reading coord block
+static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit, int *numatoms);
+
 /*************************************************************
  *
  * MAIN ORCA CODE PART
@@ -102,6 +111,7 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
   // orca specific information alloc
   orca = (orcadata *) calloc(1, sizeof(orcadata));
   orca->version = 0;
+  data->format_specific_data = orca;
 
   // filename in qm data struct
   data->file = fd;
@@ -182,7 +192,119 @@ static int have_orca(qmdata_t *data, orcadata* orca) {
 }
 
 static int parse_static_data(qmdata_t *data, int* natoms) {
-  *natoms = 3;
+  orcadata *orca = (orcadata *)data->format_specific_data;
+
+  get_input_structure(data, orca);
+
+  *natoms = data->numatoms;
+  return TRUE;
+}
+
+
+/**********************************************************
+ *
+ * Read the input atom definitions and geometry
+ *
+ **********************************************************/
+static int get_input_structure(qmdata_t *data, orcadata *orca) {
+  char buffer[BUFSIZ];
+  char units[BUFSIZ];
+  int numatoms = -1;
+  int bohr;
+  long filepos;
+  filepos = ftell(data->file);
+
+  if (goto_keyline(data->file, "CARTESIAN COORDINATES (ANGSTROEM)", NULL)) {
+    GET_LINE(buffer, data->file);
+    thisline(data->file);
+    bohr = 0;
+    // sscanf()
+  } else {
+    printf("orcaplugin) No cartesian coordinates in ANGSTROEM found.\n");
+    return FALSE;
+  }
+
+  // skip the ---- line
+  eatline(data->file, 1);
+  /* Read the coordinate block */
+  if (get_coordinates(data->file, &data->atoms, bohr, &numatoms))
+    data->num_frames_read = 0;
+  else {
+    printf("gamessplugin) Bad atom coordinate block!\n");
+    return FALSE;
+  }
+
+  data->numatoms = numatoms;
+  return TRUE;
+}
+
+
+static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
+                           int *numatoms) {
+  int i = 0;
+  int growarray = 0;
+
+  if (*numatoms<0) {
+    *atoms = (qm_atom_t*)calloc(1, sizeof(qm_atom_t));
+    growarray = 1;
+  }
+
+  /* Read in the coordinates until an empty line is reached.
+   * We expect 5 entries per line */
+  while (1) {
+    char buffer[BUFSIZ];
+    char atname[BUFSIZ];
+    float atomicnum;
+    float x,y,z, dum;
+    int n;
+    qm_atom_t *atm;
+
+    GET_LINE(buffer, file);
+    // thisline(file);
+
+    /* For FMO there is an additional atom index in the
+     * second column. Try both variants: */
+    n = sscanf(buffer,"%s %f %f %f",atname,&x,&y,&z);
+    // printf("%s\n", atname);
+    if (n!=4) {
+      // n = sscanf(buffer,"%s %f %f %f %f",atname,&atomicnum,&x,&y,&z);
+      break;
+    }
+    // if (n!=5 && n!=6) break;
+
+    if (growarray && i>0) {
+      *atoms = (qm_atom_t*)realloc(*atoms, (i+1)*sizeof(qm_atom_t));
+    }
+    atm = (*atoms)+i;
+
+    // just get the atomic number from periodic_table.h
+    atomicnum = get_pte_idx(atname);
+
+    strncpy(atm->type, atname, sizeof(atm->type));
+    atm->atomicnum = floor(atomicnum+0.5); /* nuclear charge */
+    printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
+
+    /* if coordinates are in Bohr convert them to Angstrom */
+    if (unit==BOHR) {
+      x *= BOHR_TO_ANGS;
+      y *= BOHR_TO_ANGS;
+      z *= BOHR_TO_ANGS;
+    }
+
+    atm->x = x;
+    atm->y = y;
+    atm->z = z;
+    i++;
+  }
+
+  /* If file is broken off in the middle of the coordinate block
+   * we cannot use this frame. */
+  if (*numatoms>=0 && *numatoms!=i) {
+    (*numatoms) = i;
+    return FALSE;
+  }
+
+  (*numatoms) = i;
   return TRUE;
 }
 
