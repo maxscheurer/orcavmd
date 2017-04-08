@@ -73,7 +73,7 @@ static void close_orca_read(void *mydata);
 static int parse_static_data(qmdata_t *, int *);
 
 // analyze trajectory, getting number of frames, file positions etc.
-static int analyze_traj(qmdata_t *data, orcadata *gms);
+static int analyze_traj(qmdata_t *data, orcadata *orca);
 
 // atom definitions & geometry
 static int get_input_structure(qmdata_t *data, orcadata *orca);
@@ -84,12 +84,18 @@ static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit, int *numatom
 // reading first trajectory frame
 static int read_first_frame(qmdata_t *data);
 
+int get_basis(qmdata_t *data);
+
 // main routine for extracting "step"-dependent info from the output file
 static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms, int natoms);
 
 static int get_scfdata(qmdata_t *data, qm_timestep_t *ts);
 
 static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts);
+
+static int fill_basis_arrays(qmdata_t *data);
+
+static int shelltype_int(char type);
 
 // for VMD
 static int read_orca_metadata(void *mydata, molfile_qm_metadata_t *metadata);
@@ -242,7 +248,9 @@ static int have_orca(qmdata_t *data, orcadata* orca) {
 static int parse_static_data(qmdata_t *data, int* natoms) {
   orcadata *orca = (orcadata *)data->format_specific_data;
 
-  get_input_structure(data, orca);
+  if (!get_input_structure(data, orca)) return FALSE;
+
+  // if (!get_basis(data)) return FALSE;
 
   if (!analyze_traj(data, orca)) {
     printf("orcaplugin) WARNING: Truncated or abnormally terminated file!\n\n");
@@ -294,6 +302,206 @@ static int get_input_structure(qmdata_t *data, orcadata *orca) {
 
   data->numatoms = numatoms;
   return TRUE;
+}
+
+int get_basis(qmdata_t *data) {
+
+  orcadata *orca = (orcadata *)data->format_specific_data;
+
+  char buffer[BUFSIZ];
+  char word[4][BUFSIZ];
+  int i = 0;
+  int success = 0;
+  int numread, numshells;
+  shell_t *shell;
+  long filepos;
+
+  // TODO: needed for PM3
+  // if (!strcmp(data->gbasis, "MNDO") ||
+  //     !strcmp(data->gbasis, "AM1")  ||
+  //     !strcmp(data->gbasis, "PM3")) {
+  //   /* Semiempirical methods are based on STOs.
+  //    * The only parameter we need for orbital rendering
+  //    * are the exponents zeta for S, P, D,... shells for
+  //    * each atom. Since GAMESS doesn't print these values
+  //    * we skip reading the basis set and hardcode the
+  //    * parameters in tables in VMD. */
+  //   return TRUE;
+  // }
+
+  /* Search for "ATOMIC BASIS SET" line */
+  if (pass_keyline(data->file, "BASIS SET IN INPUT FORMAT", NULL) != FOUND ) {
+    printf("orcaplugin) No basis set found!\n");
+    return FALSE;
+  }
+
+  /* initialize buffers */
+  buffer[0] = '\0';
+  for (i=0; i<3; i++) word[i][0] = '\0';
+
+
+  /* skip the next 3 lines */
+  // eatline(data->file, 2);
+
+  /* Allocate space for the basis for all atoms */
+  /* When the molecule is symmetric the actual number atoms with
+   * a basis set could be smaller */
+  data->basis_set = (basis_atom_t*)calloc(data->numatoms, sizeof(basis_atom_t));
+
+
+  i = 0; /* basis atom counter */
+  int finished = FALSE;
+  while (!finished) {
+    printf("Trying to read bf. \n");
+    if (pass_keyline(data->file, "Basis set for element", NULL) == FOUND ) {
+      thisline(data->file);
+      // eatline(data->file, 1);
+      GET_LINE(buffer, data->file);
+      thisline(data->file);
+      int elementCompleted = 0;
+      while(!elementCompleted) {
+        thisline(data->file);
+        numread = sscanf(buffer,"%s %s %s",&word[0][0], &word[1][0],&word[2][0]);
+        printf("numread: %d -- %s %s %s \n",numread, &word[0][0], &word[1][0],&word[2][0]);
+        switch (numread) {
+          case 1:
+            if (strcmp(&word[0][0], "  end;")) {
+              printf("Section ended. \n");
+              elementCompleted = 1;
+              break;
+            }
+          case 2:
+            printf("shell info.\n");
+            break;
+          case 3:
+            printf("coeffients.\n");
+            break;
+          default:
+            printf("unkown line in bf. \n");
+            elementCompleted = 1;
+            break;
+        }
+        eatline(data->file, 1);
+        GET_LINE(buffer, data->file);
+      }
+    } else {
+      finished = TRUE;
+    }
+  }
+
+  do {
+    prim_t *prim = NULL;
+    char shelltype;
+    int numprim = 0;
+    int icoeff = 0;
+    filepos = ftell(data->file);
+    GET_LINE(buffer, data->file);
+
+    /* Count the number of relevant words in the line. */
+    numread = sscanf(buffer,"%s %s %s %s",&word[0][0], &word[1][0],
+           &word[2][0], &word[3][0]);
+
+    switch (numread) {
+      case 1:
+        /* Next atom */
+        strcpy(data->basis_set[i].name, &word[0][0]);
+
+        /* skip initial blank line */
+        eatline(data->file, 1);
+
+        /* read the basis set for the current atom */
+        shell = (shell_t*)calloc(1, sizeof(shell_t));
+        numshells = 0;
+
+        do {
+          filepos = ftell(data->file);
+          // TODO: edit for Orca
+          // numprim = read_shell_primitives(data, &prim, &shelltype, icoeff, gms->have_pcgamess);
+
+          if (numprim>0) {
+            /* make sure we have eiter S, L, P, D, F or G shells */
+            if ( (shelltype!='S' && shelltype!='L' && shelltype!='P' &&
+                  shelltype!='D' && shelltype!='F' && shelltype!='G') ) {
+              printf("orcaplugin) WARNING ... %c shells are not supported \n", shelltype);
+            }
+
+            /* create new shell */
+            if (numshells) {
+              shell = (shell_t*)realloc(shell, (numshells+1)*sizeof(shell_t));
+            }
+            shell[numshells].numprims = numprim;
+            /* assign a numeric shell type */
+            shell[numshells].type = shelltype_int(shelltype);
+            shell[numshells].prim = prim;
+            data->num_basis_funcs += numprim;
+
+            /* We split L-shells into one S and one P-shell.
+             * I.e. for L-shells we have to go back read the shell again
+             * this time using the second contraction coefficients. */
+            if (shelltype=='L' && !icoeff) {
+              fseek(data->file, filepos, SEEK_SET);
+              icoeff++;
+            } else if (shelltype=='L' && icoeff) {
+              shell[numshells].type = SP_P_SHELL;
+              icoeff = 0;  /* reset the counter */
+            }
+
+            numshells++;
+          }
+        } while (numprim);
+
+        /* store shells in atom */
+        data->basis_set[i].numshells = numshells;
+        data->basis_set[i].shell = shell;
+
+        /* Update total number of basis functions */
+        data->num_shells += numshells;
+        i++;
+
+        /* go back one line so that we can read the name of the
+         * next atom */
+        fseek(data->file, filepos, SEEK_SET);
+
+        break;
+
+      case 4:
+        /* this is the very end of the basis set */
+        // if(gms->have_pcgamess){
+        //     if (!strcmp(&word[0][0],"TOTAL")  &&
+        //         !strcmp(&word[1][0],"NUMBER") &&
+        //         !strcmp(&word[2][0],"OF")     &&
+        //         !strcmp(&word[3][0],"SHELLS")) {
+        //       success = 1;
+        //       /* go back one line so that get_basis_stats()
+        //          can use this line as a keystring. */
+        //       fseek(data->file, filepos, SEEK_SET);
+        //     }
+        // }
+        // else {
+        //     if (!strcmp(&word[0][0],"TOTAL")  &&
+        //         !strcmp(&word[1][0],"NUMBER") &&
+        //         !strcmp(&word[2][0],"OF")     &&
+        //         !strcmp(&word[3][0],"BASIS")) {
+        //       success = 1;
+        //       /* go back one line so that get_basis_stats()
+        //          can use this line as a keystring. */
+        //       fseek(data->file, filepos, SEEK_SET);
+        //     }
+        // }
+        break;
+    }
+
+  } while (!success);
+
+
+  printf("orcaplugin) Parsed %d uncontracted basis functions for %d atoms.\n",
+         data->num_basis_funcs, i);
+
+  data->num_basis_atoms = i;
+
+
+  /* allocate and populate flat arrays needed for molfileplugin */
+  return fill_basis_arrays(data);
 }
 
 
@@ -394,7 +602,7 @@ static int read_first_frame(qmdata_t *data) {
  * *****************************************************/
 static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
                           int natoms) {
-  orcadata *gms = (orcadata *)data->format_specific_data;
+  orcadata *orca = (orcadata *)data->format_specific_data;
   qm_timestep_t *cur_ts;
   char buffer[BUFSIZ];
   char word[BUFSIZ];
@@ -565,13 +773,186 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
   return 0;
 }
 
+/******************************************************
+ *
+ * Populate the flat arrays containing the basis
+ * set data.
+ *
+ ******************************************************/
+static int fill_basis_arrays(qmdata_t *data) {
+  orcadata *orca = (orcadata *)data->format_specific_data;
+  int i, j, k;
+  int shellcount = 0;
+  int primcount = 0;
+
+  float *basis;
+  int *num_shells_per_atom;
+  int *num_prim_per_shell;
+  int *shell_types;
+  int *atomicnum_per_basisatom;
+
+  /* Count the total number of primitives which
+   * determines the size of the basis array. */
+  for(i=0; i<data->num_basis_atoms; i++) {
+    for (j=0; j<data->basis_set[i].numshells; j++) {
+      primcount += data->basis_set[i].shell[j].numprims;
+    }
+  }
+
+  /* reserve space for pointer to array containing basis
+   * info, i.e. contraction coeficients and expansion
+   * coefficients; need 2 entries per basis function, i.e.
+   * exponent and contraction coefficient; also,
+   * allocate space for the array holding the orbital symmetry
+   * information per primitive Gaussian.
+   * Finally, initialize the arrays holding the number of
+   * shells per atom and the number of primitives per shell*/
+  basis = (float *)calloc(2*primcount,sizeof(float));
+
+  /* make sure memory was allocated properly */
+  if (basis == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  shell_types = (int *)calloc(data->num_shells, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (shell_types == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  num_shells_per_atom = (int *)calloc(data->num_basis_atoms, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (num_shells_per_atom == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  num_prim_per_shell = (int *)calloc(data->num_shells, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (num_prim_per_shell == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  atomicnum_per_basisatom = (int *)calloc(data->num_basis_atoms, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (atomicnum_per_basisatom == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+
+  /* store pointers in struct qmdata_t */
+  data->basis = basis;
+  data->shell_types = shell_types;
+  data->num_shells_per_atom = num_shells_per_atom;
+  data->num_prim_per_shell = num_prim_per_shell;
+  data->atomicnum_per_basisatom = atomicnum_per_basisatom;
+
+  /* Go through all basis set atoms and try to assign the
+   * atomic numbers. The basis set atoms are specified by
+   * name strings (the same as in the coordinate section,
+   * except for FMO calcs.) and we try to match the names
+   * from the two lists. The basis set atom list is symmetry
+   * unique while the coordinate atom list is complete.*/
+  primcount = 0;
+  for (i=0; i<data->num_basis_atoms; i++) {
+    int found = 0;
+
+    /* For this basis atom find a matching atom from the
+     * coordinate atom list. */
+    for(j=0; j<data->numatoms; j++) {
+      char basisname[BUFSIZ];
+      strcpy(basisname, data->basis_set[i].name);
+
+      /* for FMO calculations we have to strip the "-n" tail
+       * of the basis atom name. */
+      // if (gms->have_fmo) {
+      //   *strchr(basisname, '-') = '\0';
+      // }
+
+      if (!strcmp(data->atoms[j].type, basisname)) {
+        found = 1;
+        break;
+      }
+    }
+    if (!found) {
+      printf("gamessplugin) WARNING: Couldn't find atomic number for basis set atom %s\n",
+             data->basis_set[i].name);
+      data->basis_set[i].atomicnum = 0;
+      atomicnum_per_basisatom[i] = 0;
+    } else {
+      /* assign atomic number */
+      data->basis_set[i].atomicnum = data->atoms[j].atomicnum;
+      atomicnum_per_basisatom[i]   = data->atoms[j].atomicnum;
+    }
+    num_shells_per_atom[i] = data->basis_set[i].numshells;
+
+    for (j=0; j<data->basis_set[i].numshells; j++) {
+      shell_types[shellcount] = data->basis_set[i].shell[j].type;
+      num_prim_per_shell[shellcount] = data->basis_set[i].shell[j].numprims;
+
+      for (k=0; k<data->basis_set[i].shell[j].numprims; k++) {
+        basis[2*primcount  ] = data->basis_set[i].shell[j].prim[k].exponent;
+        basis[2*primcount+1] = data->basis_set[i].shell[j].prim[k].contraction_coeff;
+        primcount++;
+      }
+      shellcount++;
+    }
+  }
+
+  return TRUE;
+}
+
+
+/**************************************************
+ *
+ * Convert shell type from char to int.
+ *
+ ************************************************ */
+static int shelltype_int(char type) {
+  int shelltype;
+
+  switch (type) {
+    case 'L':
+      /* SP_P shells are assigned in get_basis() */
+      shelltype = SP_S_SHELL;
+      break;
+    case 'S':
+      shelltype = S_SHELL;
+      break;
+    case 'P':
+      shelltype = P_SHELL;
+      break;
+    case 'D':
+      shelltype = D_SHELL;
+      break;
+    case 'F':
+      shelltype = F_SHELL;
+      break;
+    case 'G':
+      shelltype = G_SHELL;
+      break;
+    default:
+      shelltype = UNK_SHELL;
+      break;
+  }
+
+  return shelltype;
+}
 
 /* Analyze the trajectory.
  * Read the parameters controlling geometry search and
  * find the end of the trajectory, couinting the frames
  * on the way. Store the filepointer for the beginning of
  * each frame in *filepos_array. */
-static int analyze_traj(qmdata_t *data, orcadata *gms) {
+static int analyze_traj(qmdata_t *data, orcadata *orca) {
   char buffer[BUFSIZ], nserch[BUFSIZ];
   char *line;
   long filepos;
