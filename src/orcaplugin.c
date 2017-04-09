@@ -350,12 +350,17 @@ int get_basis(qmdata_t *data) {
 
   filepos = ftell(data->file);
   i = 0; /* basis atom counter */
+  char elementName[11];
   int finished = FALSE;
+
+  basis_atom_t* tempBasis = (basis_atom_t*)calloc(1, sizeof(basis_atom_t));
+
   while (!finished) {
     printf("Trying to read bf. \n");
     if (pass_keyline(data->file, "Basis set for element", NULL) == FOUND ) {
       GET_LINE(buffer, data->file);
       numread = sscanf(buffer,"%s %s",&word[0][0], &word[1][0]);
+      strcpy(elementName, &word[1][0]);
       printf("New element found: %s\n", &word[1][0]);
       int elementCompleted = 0;
 
@@ -395,145 +400,108 @@ int get_basis(qmdata_t *data) {
             }
             break;
           case 3:
-            printf("coeffients.\n");
+            printf("orcaplugin) realloc prim: %d\n", primcounter);
             prim[primcounter].exponent = atof(&word[1][0]);
             prim[primcounter].contraction_coeff = atof(&word[2][0]);
-            primcounter++;
+            printf("%f - %f\n", prim[primcounter].exponent, prim[primcounter].contraction_coeff);
             if (primcounter) {
               prim = (prim_t*)realloc(prim, (primcounter+1)*sizeof(prim_t));
             }
+            primcounter++;
             break;
           default:
-            printf("unkown line in bf. \n");
+            printf("orcaplugin) Unknown line in basis functions.\n");
             elementCompleted = 1;
             break;
         }
       }
-      printf("Number of shells: %d \n", numshells);
+      // printf("Number of shells: %d \n", numshells);
+      strcpy(tempBasis[i].name, elementName);
+      tempBasis[i].numshells = numshells;
+      tempBasis[i].shell = shell;
+      i++;
+      if (i) {
+        tempBasis = (basis_atom_t*)realloc(tempBasis, (i+1)*sizeof(basis_atom_t));
+      }
     } else {
       finished = TRUE;
       printf("orcaplugin) Reading basis set finished! \n");
     }
   }
 
+  // As we read GTOs from the Orca output file, we need to
+  // loop over all atoms and assign the basis functions
+  printf("orcaplugin) Parsed basis set of %d elements. \n", i);
+  for (size_t j = 0; j < i; j++) {
+    printf("Element: %s\n", tempBasis[j].name);
+    printf("- NShells: %d\n", tempBasis[j].numshells);
+    for (size_t k = 0; k < tempBasis[j].numshells; k++) {
+      printf("--- NPrims: %d \n", tempBasis[j].shell[k].numprims);
+      for (size_t o = 0; o < tempBasis[j].shell[k].numprims; o++) {
+        float expo = tempBasis[j].shell[k].prim[o].exponent;
+        float cont = tempBasis[j].shell[k].prim[o].contraction_coeff;
+        printf("----- E= %f , C= %f \n", expo, cont);
+      }
+    }
+  }
+
+  char currentElement[11];
+  basis_atom_t* currentBasis = (basis_atom_t*)malloc(sizeof(basis_atom_t));
+  for (size_t n = 0; n < data->numatoms; n++) {
+    strcpy(currentElement,data->atoms[n].type);
+    for (size_t j = 0; j < i; j++) {
+      if (!strcmp(currentElement, tempBasis[j].name)) {
+        printf("orcaplugin) found basis for element %s\n", currentElement);
+        currentBasis = &tempBasis[j];
+      }
+    }
+    printf("orcaplugin) Basis for element %s has %d shells.\n", currentElement, currentBasis->numshells);
+  }
+
+
 
 
 
   return FALSE;
-
-  do {
-    prim_t *prim = NULL;
-    char shelltype;
-    int numprim = 0;
-    int icoeff = 0;
-    filepos = ftell(data->file);
-    GET_LINE(buffer, data->file);
-
-    /* Count the number of relevant words in the line. */
-    numread = sscanf(buffer,"%s %s %s %s",&word[0][0], &word[1][0],
-           &word[2][0], &word[3][0]);
-
-    switch (numread) {
-      case 1:
-        /* Next atom */
-        strcpy(data->basis_set[i].name, &word[0][0]);
-
-        /* skip initial blank line */
-        eatline(data->file, 1);
-
-        /* read the basis set for the current atom */
-        shell = (shell_t*)calloc(1, sizeof(shell_t));
-        numshells = 0;
-
-        do {
-          filepos = ftell(data->file);
-          // TODO: edit for Orca
-          // numprim = read_shell_primitives(data, &prim, &shelltype, icoeff, gms->have_pcgamess);
-
-          if (numprim>0) {
-            /* make sure we have eiter S, L, P, D, F or G shells */
-            if ( (shelltype!='S' && shelltype!='L' && shelltype!='P' &&
-                  shelltype!='D' && shelltype!='F' && shelltype!='G') ) {
-              printf("orcaplugin) WARNING ... %c shells are not supported \n", shelltype);
-            }
-
-            /* create new shell */
-            if (numshells) {
-              shell = (shell_t*)realloc(shell, (numshells+1)*sizeof(shell_t));
-            }
-            shell[numshells].numprims = numprim;
-            /* assign a numeric shell type */
-            shell[numshells].type = shelltype_int(shelltype);
-            shell[numshells].prim = prim;
-            data->num_basis_funcs += numprim;
-
-            /* We split L-shells into one S and one P-shell.
-             * I.e. for L-shells we have to go back read the shell again
-             * this time using the second contraction coefficients. */
-            if (shelltype=='L' && !icoeff) {
-              fseek(data->file, filepos, SEEK_SET);
-              icoeff++;
-            } else if (shelltype=='L' && icoeff) {
-              shell[numshells].type = SP_P_SHELL;
-              icoeff = 0;  /* reset the counter */
-            }
-
-            numshells++;
-          }
-        } while (numprim);
-
-        /* store shells in atom */
-        data->basis_set[i].numshells = numshells;
-        data->basis_set[i].shell = shell;
-
-        /* Update total number of basis functions */
-        data->num_shells += numshells;
-        i++;
-
-        /* go back one line so that we can read the name of the
-         * next atom */
-        fseek(data->file, filepos, SEEK_SET);
-
-        break;
-
-      case 4:
-        /* this is the very end of the basis set */
-        // if(gms->have_pcgamess){
-        //     if (!strcmp(&word[0][0],"TOTAL")  &&
-        //         !strcmp(&word[1][0],"NUMBER") &&
-        //         !strcmp(&word[2][0],"OF")     &&
-        //         !strcmp(&word[3][0],"SHELLS")) {
-        //       success = 1;
-        //       /* go back one line so that get_basis_stats()
-        //          can use this line as a keystring. */
-        //       fseek(data->file, filepos, SEEK_SET);
-        //     }
-        // }
-        // else {
-        //     if (!strcmp(&word[0][0],"TOTAL")  &&
-        //         !strcmp(&word[1][0],"NUMBER") &&
-        //         !strcmp(&word[2][0],"OF")     &&
-        //         !strcmp(&word[3][0],"BASIS")) {
-        //       success = 1;
-        //       /* go back one line so that get_basis_stats()
-        //          can use this line as a keystring. */
-        //       fseek(data->file, filepos, SEEK_SET);
-        //     }
-        // }
-        break;
-    }
-
-  } while (!success);
-
-
-  printf("orcaplugin) Parsed %d uncontracted basis functions for %d atoms.\n",
-         data->num_basis_funcs, i);
-
-  data->num_basis_atoms = i;
-
-
-  /* allocate and populate flat arrays needed for molfileplugin */
-  return fill_basis_arrays(data);
+  //           shell[numshells].numprims = numprim;
+  //           /* assign a numeric shell type */
+  //           shell[numshells].type = shelltype_int(shelltype);
+  //           shell[numshells].prim = prim;
+  //           data->num_basis_funcs += numprim;
+  //
+  //           /* We split L-shells into one S and one P-shell.
+  //            * I.e. for L-shells we have to go back read the shell again
+  //            * this time using the second contraction coefficients. */
+  //           if (shelltype=='L' && !icoeff) {
+  //             fseek(data->file, filepos, SEEK_SET);
+  //             icoeff++;
+  //           } else if (shelltype=='L' && icoeff) {
+  //             shell[numshells].type = SP_P_SHELL;
+  //             icoeff = 0;  /* reset the counter */
+  //           }
+  //
+  //           numshells++;
+  //         }
+  //       } while (numprim);
+  //
+  //       /* store shells in atom */
+  //       data->basis_set[i].numshells = numshells;
+  //       data->basis_set[i].shell = shell;
+  //
+  //       /* Update total number of basis functions */
+  //       data->num_shells += numshells;
+  //       i++;
+  //
+  //
+  //
+  // printf("orcaplugin) Parsed %d uncontracted basis functions for %d atoms.\n",
+  //        data->num_basis_funcs, i);
+  //
+  // data->num_basis_atoms = i;
+  //
+  //
+  // /* allocate and populate flat arrays needed for molfileplugin */
+  // return fill_basis_arrays(data);
 }
 
 
@@ -915,7 +883,7 @@ static int fill_basis_arrays(qmdata_t *data) {
       }
     }
     if (!found) {
-      printf("gamessplugin) WARNING: Couldn't find atomic number for basis set atom %s\n",
+      printf("orcaplugin) WARNING: Couldn't find atomic number for basis set atom %s\n",
              data->basis_set[i].name);
       data->basis_set[i].atomicnum = 0;
       atomicnum_per_basisatom[i] = 0;
