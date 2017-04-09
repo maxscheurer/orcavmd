@@ -250,7 +250,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   if (!get_input_structure(data, orca)) return FALSE;
 
-  // if (!get_basis(data)) return FALSE;
+  if (!get_basis(data)) return FALSE;
 
   if (!analyze_traj(data, orca)) {
     printf("orcaplugin) WARNING: Truncated or abnormally terminated file!\n\n");
@@ -348,46 +348,78 @@ int get_basis(qmdata_t *data) {
    * a basis set could be smaller */
   data->basis_set = (basis_atom_t*)calloc(data->numatoms, sizeof(basis_atom_t));
 
-
+  filepos = ftell(data->file);
   i = 0; /* basis atom counter */
   int finished = FALSE;
   while (!finished) {
     printf("Trying to read bf. \n");
     if (pass_keyline(data->file, "Basis set for element", NULL) == FOUND ) {
-      thisline(data->file);
-      // eatline(data->file, 1);
       GET_LINE(buffer, data->file);
-      thisline(data->file);
+      numread = sscanf(buffer,"%s %s",&word[0][0], &word[1][0]);
+      printf("New element found: %s\n", &word[1][0]);
       int elementCompleted = 0;
+
+      prim_t *prim = NULL;
+
+      shell = (shell_t*)calloc(1, sizeof(shell_t));
+      numshells = 0;
+      int readingShell = 0;
+      int primcounter;
+
+      // this is very sloppy at the moment...
+      // for PM3 etc. Orca prints the bf per atom...
+      // float exponent = 0.0;
+      // float contract = 0.0;
+
       while(!elementCompleted) {
-        thisline(data->file);
+        GET_LINE(buffer, data->file);
         numread = sscanf(buffer,"%s %s %s",&word[0][0], &word[1][0],&word[2][0]);
         printf("numread: %d -- %s %s %s \n",numread, &word[0][0], &word[1][0],&word[2][0]);
         switch (numread) {
           case 1:
-            if (strcmp(&word[0][0], "  end;")) {
+            if (strcmp(trimleft(trimright(&word[0][0])), "end")) {
               printf("Section ended. \n");
               elementCompleted = 1;
               break;
             }
           case 2:
-            printf("shell info.\n");
+            shell[numshells].numprims = atoi(trimleft(trimright(&word[1][0])));
+            shell[numshells].type = shelltype_int(word[0][0]);
+            printf("orcaplugin) Type: %d NPrims: %d\n", shell[numshells].type, shell[numshells].numprims);
+            primcounter = 0;
+            prim = (prim_t*)calloc(1, sizeof(prim_t));
+            shell[numshells].prim = prim;
+            numshells++;
+            if (numshells) {
+              shell = (shell_t*)realloc(shell, (numshells+1)*sizeof(shell_t));
+            }
             break;
           case 3:
             printf("coeffients.\n");
+            prim[primcounter].exponent = atof(&word[1][0]);
+            prim[primcounter].contraction_coeff = atof(&word[2][0]);
+            primcounter++;
+            if (primcounter) {
+              prim = (prim_t*)realloc(prim, (primcounter+1)*sizeof(prim_t));
+            }
             break;
           default:
             printf("unkown line in bf. \n");
             elementCompleted = 1;
             break;
         }
-        eatline(data->file, 1);
-        GET_LINE(buffer, data->file);
       }
+      printf("Number of shells: %d \n", numshells);
     } else {
       finished = TRUE;
+      printf("orcaplugin) Reading basis set finished! \n");
     }
   }
+
+
+
+
+  return FALSE;
 
   do {
     prim_t *prim = NULL;
