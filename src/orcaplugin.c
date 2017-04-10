@@ -392,7 +392,7 @@ int get_basis(qmdata_t *data) {
             shell[numshells].type = shelltype_int(word[0][0]);
             printf("orcaplugin) Type: %d NPrims: %d\n", shell[numshells].type, shell[numshells].numprims);
             primcounter = 0;
-            prim = (prim_t*)calloc(1, sizeof(prim_t));
+            prim = (prim_t*)calloc(shell[numshells].numprims, sizeof(prim_t));
             shell[numshells].prim = prim;
             numshells++;
             if (numshells) {
@@ -404,9 +404,9 @@ int get_basis(qmdata_t *data) {
             prim[primcounter].exponent = atof(&word[1][0]);
             prim[primcounter].contraction_coeff = atof(&word[2][0]);
             printf("%f - %f\n", prim[primcounter].exponent, prim[primcounter].contraction_coeff);
-            if (primcounter) {
-              prim = (prim_t*)realloc(prim, (primcounter+1)*sizeof(prim_t));
-            }
+	    /*if (primcounter) {*/
+	      /*prim = (prim_t*)realloc(prim, (primcounter+1)*sizeof(prim_t));*/
+	    /*}*/
             primcounter++;
             break;
           default:
