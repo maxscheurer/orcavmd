@@ -368,7 +368,7 @@ int get_basis(qmdata_t *data) {
       shell = (shell_t*)calloc(1, sizeof(shell_t));
       numshells = 0;
       int readingShell = 0;
-      int primcounter;
+      int primcounter = 0;
 
       // this is very sloppy at the moment...
       // for PM3 etc. Orca prints the bf per atom...
@@ -390,7 +390,7 @@ int get_basis(qmdata_t *data) {
             printf("orcaplugin) Type: %d NPrims: %d\n", shell[numshells].type, shell[numshells].numprims);
             primcounter = 0;
             prim = (prim_t*)calloc(shell[numshells].numprims, sizeof(prim_t));
-            printf("!! Address of prim is %p\n", (void *)prim);
+            // printf("!! Address of prim is %p\n", (void *)prim);
             shell[numshells].prim = prim;
             numshells++;
             if (numshells) {
@@ -459,19 +459,18 @@ int get_basis(qmdata_t *data) {
     printf("orcaplugin) Basis for element %s has %d shells.\n", currentElement, currentBasis->numshells);
     data->basis_set[n].shell = (shell_t *) calloc(currentBasis->numshells, sizeof(shell_t));
     memcpy(data->basis_set[n].shell, currentBasis->shell, currentBasis->numshells * sizeof(shell_t));
-    // data->basis_set[n].shell = currentBasis->shell;
-    printf("!! Address of shell is %p\n", (void *)data->basis_set[n].shell);
     data->basis_set[n].numshells = currentBasis->numshells;
     data->num_shells += currentBasis->numshells;
     for (size_t p = 0; p < currentBasis->numshells; ++p) {
-	     data->num_basis_funcs += currentBasis->shell[p].numprims;
+      data->basis_set[n].shell[p].prim = (prim_t *) calloc(currentBasis->shell[p].numprims, sizeof(prim_t));
+      memcpy(data->basis_set[n].shell[p].prim, currentBasis->shell[p].prim, currentBasis->shell[p].numprims * sizeof(prim_t));
+	    data->num_basis_funcs += currentBasis->shell[p].numprims;
     }
     data->num_basis_atoms++;
     strncpy(data->basis_set[n].name, currentBasis->name, 11);
     currentBasis = NULL;
     currentElement  = NULL;
   }
-
   for(size_t idx = 0; idx < i; ++idx) {
     // pointer is used elsewhere, hence we don't need to delete now.
     if (tempBasisUsed[idx] == 1) continue;
@@ -489,44 +488,6 @@ int get_basis(qmdata_t *data) {
   shell = NULL;
   printf("orcaplugin) Parsed %d uncontracted basis functions.\n", data->num_basis_funcs);
 
-  // return TRUE;
-  //           shell[numshells].numprims = numprim;
-  //           /* assign a numeric shell type */
-  //           shell[numshells].type = shelltype_int(shelltype);
-  //           shell[numshells].prim = prim;
-  //           data->num_basis_funcs += numprim;
-  //
-  //           /* We split L-shells into one S and one P-shell.
-  //            * I.e. for L-shells we have to go back read the shell again
-  //            * this time using the second contraction coefficients. */
-  //           if (shelltype=='L' && !icoeff) {
-  //             fseek(data->file, filepos, SEEK_SET);
-  //             icoeff++;
-  //           } else if (shelltype=='L' && icoeff) {
-  //             shell[numshells].type = SP_P_SHELL;
-  //             icoeff = 0;  /* reset the counter */
-  //           }
-  //
-  //           numshells++;
-  //         }
-  //       } while (numprim);
-  //
-  //       /* store shells in atom */
-  //       data->basis_set[i].numshells = numshells;
-  //       data->basis_set[i].shell = shell;
-  //
-  //       /* Update total number of basis functions */
-  //       data->num_shells += numshells;
-  //       i++;
-  //
-  //
-  //
-  // printf("orcaplugin) Parsed %d uncontracted basis functions for %d atoms.\n",
-  //        data->num_basis_funcs, i);
-  //
-  // data->num_basis_atoms = i;
-  //
-  //
   // /* allocate and populate flat arrays needed for molfileplugin */
   return fill_basis_arrays(data);
 }
