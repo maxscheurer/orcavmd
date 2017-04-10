@@ -1553,10 +1553,10 @@ static void close_orca_read(void *mydata) {
       // printf("Freeing basis set of atom %d\n", i);
       for (j=0; j<data->basis_set[i].numshells; j++) {
         // printf("Freeing shell %d\n", j);
-        free(data->basis_set[i].shell[j].prim);
+        // free(data->basis_set[i].shell[j].prim);
 	      data->basis_set[i].shell[j].prim = NULL;
       }
-      free(data->basis_set[i].shell);
+      // free(data->basis_set[i].shell);
       data->basis_set[i].shell = NULL;
     }
     free(data->basis_set);
