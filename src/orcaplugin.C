@@ -457,7 +457,9 @@ int get_basis(qmdata_t *data) {
       }
     }
     printf("orcaplugin) Basis for element %s has %d shells.\n", currentElement, currentBasis->numshells);
-    data->basis_set[n].shell = currentBasis->shell;
+    data->basis_set[n].shell = (shell_t *) calloc(currentBasis->numshells, sizeof(shell_t));
+    memcpy(data->basis_set[n].shell, currentBasis->shell, currentBasis->numshells * sizeof(shell_t));
+    // data->basis_set[n].shell = currentBasis->shell;
     printf("!! Address of shell is %p\n", (void *)data->basis_set[n].shell);
     data->basis_set[n].numshells = currentBasis->numshells;
     data->num_shells += currentBasis->numshells;
@@ -487,11 +489,7 @@ int get_basis(qmdata_t *data) {
   shell = NULL;
   printf("orcaplugin) Parsed %d uncontracted basis functions.\n", data->num_basis_funcs);
 
-
-
-
-
-  /*return TRUE;*/
+  // return TRUE;
   //           shell[numshells].numprims = numprim;
   //           /* assign a numeric shell type */
   //           shell[numshells].type = shelltype_int(shelltype);
@@ -1553,17 +1551,17 @@ static void close_orca_read(void *mydata) {
 
   if (data->basis_set) {
     for(i=0; i<data->num_basis_atoms; i++) {
-      printf("Freeing basis set of atom %d\n", i);
+      // printf("Freeing basis set of atom %d\n", i);
       for (j=0; j<data->basis_set[i].numshells; j++) {
-        printf("Freeing shell primitives %d\n", j);
-        printf("--- Address of prim is %p\n", (void *)data->basis_set[i].shell[j].prim);
+        // printf("Freeing shell primitives %d\n", j);
+        // printf("--- Address of prim is %p\n", (void *)data->basis_set[i].shell[j].prim);
         free(data->basis_set[i].shell[j].prim);
 	      data->basis_set[i].shell[j].prim = NULL;
       }
-      printf("- Address of shell is %p\n", (void *)data->basis_set[i].shell);
+      // printf("- Address of shell is %p\n", (void *)data->basis_set[i].shell);
       free(data->basis_set[i].shell);
       data->basis_set[i].shell = NULL;
-      printf("- Address of shell is %p\n", (void *)data->basis_set[i].shell);
+      // printf("- Address of shell is %p\n", (void *)data->basis_set[i].shell);
     }
     free(data->basis_set);
     data->basis_set = NULL;
