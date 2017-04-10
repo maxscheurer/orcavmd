@@ -466,6 +466,8 @@ int get_basis(qmdata_t *data) {
     data->num_basis_atoms++;
     strcpy(data->basis_set[n].name, currentBasis->name);
   }
+  /*currentBasis->shell = NULL;*/
+  /*currentBasis = NULL;*/
   printf("orcaplugin) Parsed %d uncontracted basis functions.\n", data->num_basis_funcs);
 
 
