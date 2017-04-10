@@ -259,7 +259,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
   *natoms = data->numatoms;
 
   read_first_frame(data);
- 
+
   print_input_data(data);
 
   return TRUE;
@@ -344,8 +344,6 @@ int get_basis(qmdata_t *data) {
   // eatline(data->file, 2);
 
   /* Allocate space for the basis for all atoms */
-  /* When the molecule is symmetric the actual number atoms with
-   * a basis set could be smaller */
   data->basis_set = (basis_atom_t*)calloc(data->numatoms, sizeof(basis_atom_t));
 
   filepos = ftell(data->file);
@@ -354,6 +352,8 @@ int get_basis(qmdata_t *data) {
   int finished = FALSE;
 
   basis_atom_t* tempBasis = (basis_atom_t*)calloc(1, sizeof(basis_atom_t));
+
+  prim_t *prim;
 
   while (!finished) {
     printf("Trying to read bf. \n");
@@ -364,7 +364,6 @@ int get_basis(qmdata_t *data) {
       printf("New element found: %s\n", &word[1][0]);
       int elementCompleted = 0;
 
-      prim_t *prim = NULL;
 
       shell = (shell_t*)calloc(1, sizeof(shell_t));
       numshells = 0;
@@ -373,8 +372,6 @@ int get_basis(qmdata_t *data) {
 
       // this is very sloppy at the moment...
       // for PM3 etc. Orca prints the bf per atom...
-      // float exponent = 0.0;
-      // float contract = 0.0;
 
       while(!elementCompleted) {
         GET_LINE(buffer, data->file);
@@ -400,13 +397,9 @@ int get_basis(qmdata_t *data) {
             }
             break;
           case 3:
-            printf("orcaplugin) realloc prim: %d\n", primcounter);
             prim[primcounter].exponent = atof(&word[1][0]);
             prim[primcounter].contraction_coeff = atof(&word[2][0]);
             printf("%f - %f\n", prim[primcounter].exponent, prim[primcounter].contraction_coeff);
-	    /*if (primcounter) {*/
-	      /*prim = (prim_t*)realloc(prim, (primcounter+1)*sizeof(prim_t));*/
-	    /*}*/
             primcounter++;
             break;
           default:
@@ -423,6 +416,8 @@ int get_basis(qmdata_t *data) {
       if (i) {
         tempBasis = (basis_atom_t*)realloc(tempBasis, (i+1)*sizeof(basis_atom_t));
       }
+      // set prim to nullpointer!
+      prim = NULL;
     } else {
       finished = TRUE;
       printf("orcaplugin) Reading basis set finished! \n");
@@ -445,30 +440,48 @@ int get_basis(qmdata_t *data) {
     }
   }
 
-  char currentElement[11];
+  // Allocate an array of zeros to store whether the tempBasis
+  // of the same index was actually used.
+  int* tempBasisUsed = (int*) calloc(i, sizeof(int));
+
+  const char* currentElement;
   basis_atom_t* currentBasis;
   for (size_t n = 0; n < data->numatoms; n++) {
-// strncpy is better!
-    strcpy(currentElement,data->atoms[n].type);
+    currentElement = data->atoms[n].type;
     for (size_t j = 0; j < i; j++) {
       if (!strcmp(currentElement, tempBasis[j].name)) {
         printf("orcaplugin) found basis for element %s\n", currentElement);
         currentBasis = &tempBasis[j];
+	       tempBasisUsed[j] = 1;
       }
     }
     printf("orcaplugin) Basis for element %s has %d shells.\n", currentElement, currentBasis->numshells);
-    /*data->basis_set[n].shell = currentBasis->shell;*/
-    /*memcpy(&data->basis_set[n].shell, &currentBasis->shell, sizeof(currentBasis->shell));*/
-    /*data->basis_set[n].numshells = currentBasis->numshells;*/
+    data->basis_set[n].shell = currentBasis->shell;
+    data->basis_set[n].numshells = currentBasis->numshells;
     data->num_shells += currentBasis->numshells;
     for (size_t p = 0; p < currentBasis->numshells; ++p) {
-	  data->num_basis_funcs += currentBasis->shell[p].numprims;	
+	     data->num_basis_funcs += currentBasis->shell[p].numprims;
     }
     data->num_basis_atoms++;
-    strcpy(data->basis_set[n].name, currentBasis->name);
+    strncpy(data->basis_set[n].name, currentBasis->name, 11);
+    currentBasis = NULL;
+    currentElement  = NULL;
   }
-  /*currentBasis->shell = NULL;*/
-  /*currentBasis = NULL;*/
+
+  for(size_t idx = 0; idx < i; ++idx) {
+    // pointer is used elsewhere, hence we don't need to delete now.
+    if (tempBasisUsed[idx] == 1) continue;
+    for (size_t shellIdx = 0; shellIdx < tempBasis[idx].numshells; shellIdx++) {
+      shell_t* cshell = &tempBasis[idx].shell[shellIdx];
+      free(cshell->prim);
+      cshell->prim = NULL;
+    }
+    printf("Freeing unused pointer.\n");
+    free(tempBasis[idx].shell);
+    tempBasis[idx].shell = NULL;
+  }
+  free(tempBasis);
+  tempBasis = NULL;
   printf("orcaplugin) Parsed %d uncontracted basis functions.\n", data->num_basis_funcs);
 
 
@@ -1537,12 +1550,17 @@ static void close_orca_read(void *mydata) {
 
   if (data->basis_set) {
     for(i=0; i<data->num_basis_atoms; i++) {
+      // printf("Freeing basis set of atom %d\n", i);
       for (j=0; j<data->basis_set[i].numshells; j++) {
+        // printf("Freeing shell %d\n", j);
         free(data->basis_set[i].shell[j].prim);
+	      data->basis_set[i].shell[j].prim = NULL;
       }
       free(data->basis_set[i].shell);
+      data->basis_set[i].shell = NULL;
     }
     free(data->basis_set);
+    data->basis_set = NULL;
   }
 
   for (i=0; i<data->num_frames; i++) {

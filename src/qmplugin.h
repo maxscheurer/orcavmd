@@ -719,9 +719,9 @@ static int symmetry_expand(qm_atom_t **atoms, int numunique, int natoms,
   printf("gamessplugin) Expanding %d coordinates for pointgroup %s, naxis=%d\n",
          numunique, pg, naxis);
 
-  unique = calloc(3*numunique, sizeof(float));
-  image  = calloc(3*numunique, sizeof(float));
-  indexmap = calloc(numunique, sizeof(int));
+  unique = (float*)calloc(3*numunique, sizeof(float));
+  image  =  (float*)calloc(3*numunique, sizeof(float));
+  indexmap =  (int*)calloc(numunique, sizeof(int));
   for (i=0; i<numunique; i++) {
     unique[3*i  ] = (*atoms)[i].x;
     unique[3*i+1] = (*atoms)[i].y;
@@ -762,7 +762,7 @@ static int symmetry_expand(qm_atom_t **atoms, int numunique, int natoms,
 /*            image[3*i+1], image[3*i+2]); */
   }
 
-  expanded = calloc(3*numunique, sizeof(float));
+  expanded = (float*)calloc(3*numunique, sizeof(float));
   memcpy(expanded, unique, 3*numunique* sizeof(float));
   numexp=numunique;
   for (i=0; i<numunique; i++) {
@@ -778,8 +778,8 @@ static int symmetry_expand(qm_atom_t **atoms, int numunique, int natoms,
     }
 
     if (!found) {
-      expanded = realloc((float*)expanded, 3*(numexp+1)*sizeof(float));
-      indexmap = realloc((int*)indexmap, (numexp+1)*sizeof(int));
+      expanded = (float*)realloc((float*)expanded, 3*(numexp+1)*sizeof(float));
+      indexmap = (int*)realloc((int*)indexmap, (numexp+1)*sizeof(int));
       expanded[3*numexp  ] = image[3*i  ];
       expanded[3*numexp+1] = image[3*i+1];
       expanded[3*numexp+2] = image[3*i+2];
@@ -807,9 +807,9 @@ static int symmetry_expand(qm_atom_t **atoms, int numunique, int natoms,
    *     the new number of atoms, so that the caller knows how
    *     many atoms there are. */
   if (!natoms)
-    *atoms = calloc(numexp, sizeof(qm_atom_t));
+    *atoms = (qm_atom_t*)calloc(numexp, sizeof(qm_atom_t));
   else 
-    *atoms = realloc((qm_atom_t*)(*atoms), numexp*sizeof(qm_atom_t));
+    *atoms = (qm_atom_t*)realloc((qm_atom_t*)(*atoms), numexp*sizeof(qm_atom_t));
 
   for (i=numunique; i<numexp; i++) {
     (*atoms)[i].x = expanded[3*i  ];
