@@ -86,6 +86,8 @@ static int read_first_frame(qmdata_t *data);
 
 int get_basis(qmdata_t *data);
 
+static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t *wf);
+
 // main routine for extracting "step"-dependent info from the output file
 static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms, int natoms);
 
@@ -601,6 +603,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   printf("orcaplugin) Timestep %d:\n", data->num_frames_read);
   printf("orcaplugin) ============\n");
 
+  cur_ts = data->qm_timestep + data->num_frames_read;
 
   // debugging the trajectory reading file positions
   // printf("nfread: %d \n", data->num_frames_read);
@@ -617,83 +620,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   * lines 2840 - 3122 in gamessplugin.c
    */
 
-  /* Read the coordinate block */
-  // if (data->runtype==MOLFILE_RUNTYPE_OPTIMIZE ||
-  //     data->runtype==MOLFILE_RUNTYPE_SADPOINT) {
-  //   goto_keyline(data->file, "COORDINATES OF ALL ATOMS", NULL);
-  //   /* get the units */
-  //   GET_LINE(buffer, data->file);
-  //   sscanf(buffer, " COORDINATES OF ALL ATOMS ARE %s", word);
-  //   units = !strcmp(word, "(BOHR)");
-  //   eatline(data->file, 2);
-  //
-  //   if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
-  //     printf("orcaplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
-  //   }
-  // }
-  // else if (data->runtype==MOLFILE_RUNTYPE_SURFACE) {
-  //   if (pass_keyline(data->file, "HAS ENERGY VALUE",
-  //                    "...... END OF ONE-ELECTRON INTEGRALS ......")
-  //       == FOUND) {
-  //     /* Read the coordinate block following
-  //      * ---- SURFACE MAPPING GEOMETRY ---- */
-  //     int i, n;
-  //     for (i=0; i<natoms; i++) {
-  //       char atname[BUFSIZ];
-  //       float x,y,z;
-  //       GET_LINE(buffer, data->file);
-  //       n = sscanf(buffer,"%s %f %f %f", atname, &x,&y,&z);
-  //       if (n!=4 || strcmp(atname, data->atoms[i].type)) break;
-  //       data->atoms[i].x = x;
-  //       data->atoms[i].y = y;
-  //       data->atoms[i].z = z;
-  //     }
-  //     if (i!=natoms) {
-  //       printf("orcaplugin) Couldn't read surface mapping geometry for timestep %d\n", data->num_frames_read);
-  //     }
-  //   }
-  //   else {
-  //     /* Read the coordinate block following
-  //      * ATOM      ATOMIC                      COORDINATES (BOHR) */
-  //     goto_keyline(data->file, "ATOM      ATOMIC", NULL);
-  //     /* get the units */
-  //     GET_LINE(buffer, data->file);
-  //     sscanf(buffer, " ATOM      ATOMIC                      COORDINATES %s", word);
-  //     units = !strcmp(word, "(BOHR)");
-  //     eatline(data->file, 1);
-  //
-  //     if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
-  //       printf("orcaplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
-  //     }
-  //   }
-  // }
-  // /* XXX could merge this with OPTIMIZE/SADPOINT */
-  // else if (data->runtype==MOLFILE_RUNTYPE_MEX) {
-  //   int numuniqueatoms = natoms;
-  //   goto_keyline(data->file, "COORDINATES OF SYMMETRY UNIQUE ATOMS", NULL);
-  //   /* get the units */
-  //   GET_LINE(buffer, data->file);
-  //   sscanf(buffer, " COORDINATES OF SYMMETRY UNIQUE ATOMS ARE %s", word);
-  //   units = !strcmp(word, "(BOHR)");
-  //   eatline(data->file, 2);
-  //   if (!get_coordinates(data->file, &data->atoms, units, &numuniqueatoms)) {
-  //     printf("orcaplugin) Expanding symmetry unique coordinates for timestep %d\n", data->num_frames_read);
-  //
-  //     /* Create images of symmetry unique atoms so that we have
-  //      * the full coordinate set. */
-  //     symmetry_expand(&data->atoms, numuniqueatoms, natoms,
-  //                     data->pointgroup, data->naxis);
-  //   }
-  // }
-
-  /* get a convenient pointer to the current qm timestep */
-  // cur_ts = data->qm_timestep + data->num_frames_read;
-
-  /* read the SCF energies */
-  if (get_scfdata(data, cur_ts) == FALSE) {
-    printf("orcaplugin) Couldn't find SCF iterations for timestep %d\n",
-           data->num_frames_read);
-  }
+  // reading geometries...
 
   /* Try reading canonical alpha/beta wavefunction */
   check_add_wavefunctions(data, cur_ts);
@@ -708,7 +635,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   // }
 
 
-  /* Read the energy gradients (=forces on atoms) */
+  /* Read the energy gradients (= -forces on atoms) */
   // if (get_gradient(data, cur_ts)) {
   //   printf("orcaplugin) Energy gradient found.\n");
   // }
@@ -758,6 +685,96 @@ static int get_scfdata(qmdata_t *data, qm_timestep_t *ts) {
  **********************************************************/
  // 3461
 static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
+  qm_wavefunction_t *wavef;
+  int i, n=1;
+
+  if (data->scftype==MOLFILE_SCFTYPE_UHF ||
+      data->scftype==MOLFILE_SCFTYPE_GVB ||
+      data->scftype==MOLFILE_SCFTYPE_MCSCF) {
+    /* Try to read second wavefunction, e.g. spin beta */
+    n = 2;
+  }
+
+  for (i=0; i<n; i++) {
+    /* Allocate memory for new wavefunction */
+    wavef = add_wavefunction(ts);
+
+    /* Try to read wavefunction and orbital energies */
+    if (get_wavefunction(data, ts, wavef) == FALSE) {
+      /* Free the last wavefunction again. */
+      del_wavefunction(ts);
+#ifdef DEBUGGING
+      printf("orcaplugin) No canonical wavefunction present for timestep %d\n", data->num_frames_read);
+#endif
+      break;
+
+    } else {
+      char action[32];
+      char spinstr[32];
+      strcpy(spinstr, "");
+      if (data->scftype==MOLFILE_SCFTYPE_UHF) {
+        if (wavef->spin==SPIN_BETA) {
+          strcat(spinstr, "spin  beta, ");
+        } else {
+          strcat(spinstr, "spin alpha, ");
+        }
+      }
+
+      /* The last SCF energy is the energy of this electronic state */
+      if (ts->scfenergies) {
+        wavef->energy = ts->scfenergies[ts->num_scfiter-1];
+      } else {
+        wavef->energy = 0.f;
+      }
+
+      /* Multiplicity */
+      wavef->mult = data->multiplicity;
+
+
+      /* String telling wether wavefunction was added, updated
+       * or ignored. */
+      strcpy(action, "added");
+
+      /* If there exists a canonical wavefunction of the same spin
+       * we'll replace it */
+      if (ts->numwave>1 && wavef->type==MOLFILE_WAVE_CANON) {
+        int i, found =-1;
+        for (i=0; i<ts->numwave-1; i++) {
+          if (ts->wave[i].type==wavef->type &&
+              ts->wave[i].spin==wavef->spin &&
+              ts->wave[i].exci==wavef->exci &&
+              !strncmp(ts->wave[i].info, wavef->info, MOLFILE_BUFSIZ)) {
+            found = i;
+            break;
+          }
+        }
+        if (found>=0) {
+          /* If the new wavefunction has more orbitals we
+           * replace the old one for this step. */
+          if (wavef->num_orbitals >
+              ts->wave[found].num_orbitals) {
+            /* Replace existing wavefunction for this step */
+            replace_wavefunction(ts, found);
+            sprintf(action, "%d updated", found);
+          } else {
+            /* Delete last wavefunction again */
+            del_wavefunction(ts);
+            sprintf(action, "matching %d ignored", found);
+          }
+          wavef = &ts->wave[ts->numwave-1];
+        }
+      }
+
+      printf("orcaplugin) Wavefunction %s (%s):\n", action, wavef->info);
+      printf("orcaplugin)   %d orbitals, %sexcitation %d, multiplicity %d\n",
+             wavef->num_orbitals, spinstr, wavef->exci, wavef->mult);
+    }
+  }
+
+  return i;
+}
+
+static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t *wf) {
   return 0;
 }
 
