@@ -259,8 +259,8 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
   *natoms = data->numatoms;
 
   read_first_frame(data);
-
-  // print_input_data(data);
+ 
+  print_input_data(data);
 
   return TRUE;
 }
@@ -446,7 +446,7 @@ int get_basis(qmdata_t *data) {
   }
 
   char currentElement[11];
-  basis_atom_t* currentBasis = (basis_atom_t*)malloc(sizeof(basis_atom_t));
+  basis_atom_t* currentBasis;
   for (size_t n = 0; n < data->numatoms; n++) {
     strcpy(currentElement,data->atoms[n].type);
     for (size_t j = 0; j < i; j++) {
@@ -456,13 +456,23 @@ int get_basis(qmdata_t *data) {
       }
     }
     printf("orcaplugin) Basis for element %s has %d shells.\n", currentElement, currentBasis->numshells);
+    /*data->basis_set[n].shell = currentBasis->shell;*/
+    /*memcpy(&data->basis_set[n].shell, &currentBasis->shell, sizeof(currentBasis->shell));*/
+    /*data->basis_set[n].numshells = currentBasis->numshells;*/
+    data->num_shells += currentBasis->numshells;
+    for (size_t p = 0; p < currentBasis->numshells; ++p) {
+	  data->num_basis_funcs += currentBasis->shell[p].numprims;	
+    }
+    data->num_basis_atoms++;
+    strcpy(data->basis_set[n].name, currentBasis->name);
   }
+  printf("orcaplugin) Parsed %d uncontracted basis functions.\n", data->num_basis_funcs);
 
 
 
 
 
-  return FALSE;
+  /*return TRUE;*/
   //           shell[numshells].numprims = numprim;
   //           /* assign a numeric shell type */
   //           shell[numshells].type = shelltype_int(shelltype);
@@ -501,7 +511,7 @@ int get_basis(qmdata_t *data) {
   //
   //
   // /* allocate and populate flat arrays needed for molfileplugin */
-  // return fill_basis_arrays(data);
+  return fill_basis_arrays(data);
 }
 
 
@@ -906,6 +916,7 @@ static int fill_basis_arrays(qmdata_t *data) {
       shellcount++;
     }
   }
+  printf("orcaplugin) Filled basis arrays.\n");
 
   return TRUE;
 }
