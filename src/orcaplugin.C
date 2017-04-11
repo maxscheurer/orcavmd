@@ -473,15 +473,15 @@ int get_basis(qmdata_t *data) {
     currentBasis = NULL;
     currentElement  = NULL;
   }
+
+  // cleaning up memory for tempBasis and its shells
   for(size_t idx = 0; idx < i; ++idx) {
-    // pointer is used elsewhere, hence we don't need to delete now.
-    if (tempBasisUsed[idx] == 1) continue;
     for (size_t shellIdx = 0; shellIdx < tempBasis[idx].numshells; shellIdx++) {
       shell_t* cshell = &tempBasis[idx].shell[shellIdx];
       free(cshell->prim);
       cshell->prim = NULL;
     }
-    printf("Freeing unused pointer.\n");
+    // printf("Freeing unused pointer.\n");
     free(tempBasis[idx].shell);
     tempBasis[idx].shell = NULL;
   }
