@@ -10,6 +10,8 @@ Inspired from gamessplugin.c
 #include <ctype.h>
 #include <errno.h>
 #include <time.h>
+#include <vector>
+#include <iostream>
 #include "qmplugin.h"
 #include "unit_conversion.h"
 #include "periodic_table.h"
@@ -262,7 +264,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  print_input_data(data);
+  // print_input_data(data);
 
   return TRUE;
 }
@@ -481,7 +483,6 @@ int get_basis(qmdata_t *data) {
       free(cshell->prim);
       cshell->prim = NULL;
     }
-    // printf("Freeing unused pointer.\n");
     free(tempBasis[idx].shell);
     tempBasis[idx].shell = NULL;
   }
@@ -775,6 +776,146 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
 }
 
 static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t *wf) {
+  std::vector<float> orbitalEnergies;
+  std::vector<int> orbitalOccupancies;
+  std::vector<float> wavefunctionCoeffs;
+  int num_orbitals = 0;
+
+  char buffer[BUFSIZ];
+  char word[6][BUFSIZ];
+  long filepos;
+  char *line;
+
+  buffer[0] = '\0';
+  int i = 0;
+  for (i=0; i<6; i++) word[i][0] = '\0';
+
+  if (wf == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  wf->has_occup = FALSE;
+  wf->has_orben = FALSE;
+  wf->type = MOLFILE_WAVE_UNKNOWN;
+  wf->spin = SPIN_ALPHA;
+  wf->exci = 0;
+  strncpy(wf->info, "unknown", MOLFILE_BUFSIZ);
+
+  filepos = ftell(data->file);
+
+  do {
+    GET_LINE(buffer, data->file);
+    line = trimleft(trimright(buffer));
+    if(!strcmp(line, "MOLECULAR ORBITALS")) {
+      wf->type = MOLFILE_WAVE_CANON;
+      strncpy(wf->info, "canonical", MOLFILE_BUFSIZ);
+    }
+  } while(wf->type == MOLFILE_WAVE_UNKNOWN && strcmp(line, "FINAL SINGLE POINT ENERGY"));
+
+  if(wf->type == MOLFILE_WAVE_UNKNOWN) {
+    #ifdef DEBUGGING
+        printf("orcaplugin) get_wavefunction(): No wavefunction found!\n");
+    #endif
+        fseek(data->file, filepos, SEEK_SET);
+        return FALSE;
+  } else {
+    #ifdef DEBUGGING
+      printf("orcaplugin) Found wavefunction of type %d.\n", wf->type);
+    #endif
+  }
+
+  eatline(data->file, 1);
+
+  // number of read values from line;
+  int numReadOrbitalIndices = 0;
+  int numReadEnergies = 0;
+  int numReadOccupancies = 0;
+  int numReadCoefficients = 0;
+
+  // orbital indices
+  int n[6];
+
+  int wavefunctionRead = 0;
+  while(!wavefunctionRead) {
+    float coeff[6], energies[6];
+    float occ[6];
+    char dumpName[BUFSIZ];
+    char dumpBasisFunc[BUFSIZ];
+    filepos = ftell(data->file);
+
+    // reads the orbital indices
+    GET_LINE(buffer, data->file);
+    numReadOrbitalIndices = sscanf(buffer, "%d %d %d %d %d %d", &n[0], &n[1], &n[2], &n[3], &n[4], &n[5]);
+    if (!numReadOrbitalIndices) {
+      /* If there are no orbital indexes then this must be the
+       * end of the wavefunction coefficient table. */
+      fseek(data->file, filepos, SEEK_SET);
+      break;
+    }
+
+    // reads the orbital indices
+    GET_LINE(buffer, data->file);
+    numReadEnergies = sscanf(buffer, "%f %f %f %f %f %f", &energies[0], &energies[1], &energies[2],
+     &energies[3], &energies[4], &energies[5]);
+    if (numReadEnergies != numReadOrbitalIndices) {
+      printf("orcaplugin) Molecular Orbital section corrupted!\n");
+      break;
+    }
+
+    // store the energies in vector
+    if (numReadEnergies) {
+      for (size_t c = 0; c < numReadEnergies; c++) {
+        orbitalEnergies.push_back(energies[c]);
+        std::cout << "Energy: " <<energies[c]<< std::endl;
+      }
+    }
+
+    // reads the orbital occupancies
+    GET_LINE(buffer, data->file);
+    numReadOccupancies = sscanf(buffer, "%f %f %f %f %f %f", &occ[0], &occ[1], &occ[2],
+      &occ[3], &occ[4], &occ[5]);
+    if (numReadOccupancies != numReadOrbitalIndices) {
+      printf("orcaplugin) Molecular Orbital section corrupted!\n");
+      break;
+    }
+
+    // stores the occupancies in vector
+    if(numReadOccupancies) {
+      for (size_t c = 0; c < numReadOccupancies; c++) {
+        orbitalOccupancies.push_back((int)occ[c]);
+        std::cout << "Occupancy: " << occ[c] << std::endl;
+      }
+    }
+
+    // determine number of contracted basis functions
+    // this should be placed elsewhere...
+    // for (size_t atom = 0; atom < data->num_basis_atoms; atom++) {
+    //   for (size_t shellCount = 0; shellCount < data->basis_set[atom].numshells; shellCount++) {
+    //     data->wavef_size += 2*data->basis_set[atom].shell[shellCount].type + 1;
+    //   }
+    // }
+
+    // skip --- line
+    eatline(data->file, 1);
+
+    GET_LINE(buffer, data->file);
+    // we expect as many coefficients as numReadOccupancies, numReadEnergies, numReadOrbitalIndices!
+    numReadCoefficients = sscanf(buffer, "%s %s %f %f %f %f %f %f", &dumpName, &dumpBasisFunc,
+      &coeff[0], &coeff[1], &coeff[2],&coeff[3], &coeff[4], &coeff[5]);
+    if (numReadCoefficients == (numReadOrbitalIndices + 2)) {
+      std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
+      for (size_t k = 0; k < (numReadCoefficients-2); k++) {
+        std::cout << coeff[k] << std::endl;
+      }
+    }
+
+
+
+    break;
+  }
+
+
   return 0;
 }
 
