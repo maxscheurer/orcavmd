@@ -835,8 +835,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
 
   // orbital indices
   int n[6];
-
   int wavefunctionRead = 0;
+  int firstRead = 1;
   while(!wavefunctionRead) {
     float coeff[6], energies[6];
     float occ[6];
@@ -845,38 +845,42 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     filepos = ftell(data->file);
 
     // reads the orbital indices
-    GET_LINE(buffer, data->file);
+    if (firstRead == 1) {
+      GET_LINE(buffer, data->file);
+      firstRead++;
+    }
+
     numReadOrbitalIndices = sscanf(buffer, "%d %d %d %d %d %d", &n[0], &n[1], &n[2], &n[3], &n[4], &n[5]);
-    if (!numReadOrbitalIndices) {
+    if (!numReadOrbitalIndices || numReadOrbitalIndices == -1) {
       /* If there are no orbital indexes then this must be the
        * end of the wavefunction coefficient table. */
       fseek(data->file, filepos, SEEK_SET);
+      wavefunctionRead = 1;
       break;
     }
 
-    // reads the orbital indices
+    // reads the orbital energies
     GET_LINE(buffer, data->file);
     numReadEnergies = sscanf(buffer, "%f %f %f %f %f %f", &energies[0], &energies[1], &energies[2],
      &energies[3], &energies[4], &energies[5]);
     if (numReadEnergies != numReadOrbitalIndices) {
-      printf("orcaplugin) Molecular Orbital section corrupted!\n");
+      printf("orcaplugin) Molecular Orbital section corrupted! energies.\n");
       break;
     }
 
     // store the energies in vector
-    if (numReadEnergies) {
+    if (numReadEnergies != -1) {
       for (size_t c = 0; c < numReadEnergies; c++) {
         orbitalEnergies.push_back(energies[c]);
         std::cout << "Energy: " <<energies[c]<< std::endl;
       }
     }
-
     // reads the orbital occupancies
     GET_LINE(buffer, data->file);
     numReadOccupancies = sscanf(buffer, "%f %f %f %f %f %f", &occ[0], &occ[1], &occ[2],
       &occ[3], &occ[4], &occ[5]);
     if (numReadOccupancies != numReadOrbitalIndices) {
-      printf("orcaplugin) Molecular Orbital section corrupted!\n");
+      printf("orcaplugin) Molecular Orbital section corrupted! %d\n", numReadOccupancies);
       break;
     }
 
@@ -899,20 +903,30 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     // skip --- line
     eatline(data->file, 1);
 
-    GET_LINE(buffer, data->file);
+    std::vector<std::vector<float>> moCoefficients;
     // we expect as many coefficients as numReadOccupancies, numReadEnergies, numReadOrbitalIndices!
-    numReadCoefficients = sscanf(buffer, "%s %s %f %f %f %f %f %f", &dumpName, &dumpBasisFunc,
+    // read them as long as we find new coefficients
+    int readingBlock = 1;
+    int coefficientNumber = 0;
+    while(readingBlock) {
+      GET_LINE(buffer, data->file);
+      numReadCoefficients = sscanf(buffer, "%s %s %f %f %f %f %f %f", &dumpName, &dumpBasisFunc,
       &coeff[0], &coeff[1], &coeff[2],&coeff[3], &coeff[4], &coeff[5]);
-    if (numReadCoefficients == (numReadOrbitalIndices + 2)) {
-      std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
-      for (size_t k = 0; k < (numReadCoefficients-2); k++) {
-        std::cout << coeff[k] << std::endl;
+      // the coefficient number is the number of read elements minus 2 bc. of the atom and bf name
+      coefficientNumber = (numReadCoefficients - 2);
+      if (coefficientNumber == numReadOrbitalIndices) {
+        std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
+        std::vector<float> currentMoCoeffs;
+        for (size_t cidx = 0; cidx < coefficientNumber; cidx++) {
+          currentMoCoeffs.push_back(coeff[cidx]);
+          std::cout << coeff[cidx] << std::endl;
+        }
+        moCoefficients.push_back(currentMoCoeffs);
+      } else {
+        // block seems to be finished
+        readingBlock = 0;
       }
     }
-
-
-
-    break;
   }
 
 
