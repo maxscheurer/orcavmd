@@ -12,9 +12,13 @@ Inspired from gamessplugin.c
 #include <time.h>
 #include <vector>
 #include <iostream>
+#include <algorithm>
+#include <string>
 #include "qmplugin.h"
 #include "unit_conversion.h"
 #include "periodic_table.h"
+
+typedef std::vector<std::vector<std::vector<float>>> MoCoeff;
 
 #define DEBUGGING 1
 #ifdef DEBUGGING
@@ -832,6 +836,9 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   int numReadEnergies = 0;
   int numReadOccupancies = 0;
   int numReadCoefficients = 0;
+  std::vector<int> numberContractedBf;
+  std::vector<int> wfAngMoment;
+  MoCoeff allCoefficients;
 
   // orbital indices
   int n[6];
@@ -872,7 +879,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     if (numReadEnergies != -1) {
       for (size_t c = 0; c < numReadEnergies; c++) {
         orbitalEnergies.push_back(energies[c]);
-        std::cout << "Energy: " <<energies[c]<< std::endl;
+        // std::cout << "Energy: " <<energies[c]<< std::endl;
       }
     }
     // reads the orbital occupancies
@@ -888,8 +895,9 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     if(numReadOccupancies) {
       for (size_t c = 0; c < numReadOccupancies; c++) {
         orbitalOccupancies.push_back((int)occ[c]);
-        std::cout << "Occupancy: " << occ[c] << std::endl;
+        // std::cout << "Occupancy: " << occ[c] << std::endl;
       }
+      num_orbitals += numReadOccupancies;
     }
 
     // determine number of contracted basis functions
@@ -908,6 +916,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     // read them as long as we find new coefficients
     int readingBlock = 1;
     int coefficientNumber = 0;
+    int blockNumberOfContracted = 0;
     while(readingBlock) {
       GET_LINE(buffer, data->file);
       numReadCoefficients = sscanf(buffer, "%s %s %f %f %f %f %f %f", &dumpName, &dumpBasisFunc,
@@ -915,21 +924,106 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
       // the coefficient number is the number of read elements minus 2 bc. of the atom and bf name
       coefficientNumber = (numReadCoefficients - 2);
       if (coefficientNumber == numReadOrbitalIndices) {
-        std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
+        // std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
         std::vector<float> currentMoCoeffs;
         for (size_t cidx = 0; cidx < coefficientNumber; cidx++) {
           currentMoCoeffs.push_back(coeff[cidx]);
-          std::cout << coeff[cidx] << std::endl;
+          // std::cout << coeff[cidx] << std::endl;
         }
+        blockNumberOfContracted++;
         moCoefficients.push_back(currentMoCoeffs);
+        if (firstRead == 2) {
+          std::string bfn = dumpBasisFunc;
+          std::size_t found = bfn.find_first_not_of("0123456789 ");
+          if (found!=std::string::npos) {
+            std::cout << bfn << std::endl;
+            // angu
+            // wfAngMoment.push_back()
+          } else {
+            printf("orcaplugin) Could not determine BF ang. mom.\n");
+            return FALSE;
+          }
+        }
       } else {
         // block seems to be finished
         readingBlock = 0;
+        numberContractedBf.push_back(blockNumberOfContracted);
       }
     }
+    allCoefficients.push_back(moCoefficients);
   }
 
+  if ( std::adjacent_find( numberContractedBf.begin(), numberContractedBf.end(), std::not_equal_to<int>() ) != numberContractedBf.end() ) {
+    printf("orcaplugin) Molecular orbital section corrupted. Did not read consistent number of contracted basis functions!\n");
+    for (auto con : numberContractedBf) {
+      std::cout << con << std::endl;
+    }
+    return FALSE;
+  }
 
+  // assign the number of contracted functions to wavefunction size
+  data->wavef_size = numberContractedBf[0];
+  wf->num_orbitals  = num_orbitals;
+  wf->orb_energies = (float *) calloc(num_orbitals, num_orbitals * sizeof(float));
+  wf->orb_occupancies = (float *) calloc(num_orbitals, num_orbitals * sizeof(float));
+  wf->wave_coeffs = (float *) calloc(num_orbitals * data->wavef_size, num_orbitals *
+                                    data->wavef_size * sizeof(float));
+
+  int cnt = 0;
+  for (auto en : orbitalEnergies) {
+    wf->orb_energies[cnt] = en;
+    cnt++;
+  }
+  cnt = 0;
+  for (auto occ : orbitalOccupancies) {
+    wf->orb_occupancies[cnt] = occ;
+    cnt++;
+  }
+
+  int rowIndex = 0, columnIndex = 0, blockIdx = 0;
+  int moBlockSize = 0;
+  int moBlockIdx = 0;
+  for (auto moBlock : allCoefficients) {
+    for (auto moRow : moBlock) {
+      std::cout << rowIndex << std::endl;
+      for (auto moCo : moRow) {
+        if ((columnIndex * data->wavef_size + rowIndex) > num_orbitals * data->wavef_size) {
+          std::cout << "something went wrong:" << columnIndex << std::endl;
+          std::cout << "something went wrong:" << (columnIndex * data->wavef_size + rowIndex) << " vs. " << num_orbitals * data->wavef_size << std::endl;
+          return FALSE;
+        }
+        wf->wave_coeffs[columnIndex * data->wavef_size + rowIndex] = moCo;
+        columnIndex++;
+      }
+      columnIndex = moBlockSize;
+      rowIndex++;
+    }
+    rowIndex = 0;
+    // 0-based!!!
+    moBlockSize += moBlock[moBlockIdx].size();
+    columnIndex = moBlockSize;
+    moBlockIdx++;
+    std::cout << "bs: " << moBlockSize << std::endl;
+  }
+
+  for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
+    if (t % num_orbitals == 0) {
+      std::cout << "---------- " << t/num_orbitals << std::endl;
+    }
+    std::cout << wf->wave_coeffs[t] << std::endl;
+  }
+  data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
+  data->multiplicity = 1;
+
+  std::cout << "----------------------------------------" << std::endl;
+  std::cout << "Number of orbitals: " << num_orbitals << std::endl;
+  std::cout << "Number of contracted bf: " << numberContractedBf[0] << std::endl;
+  std::cout << "----------------------------------------" << std::endl;
+
+  return TRUE;
+}
+
+static int angular_momentum(std::string orbitalName) {
   return 0;
 }
 
