@@ -268,7 +268,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  // print_input_data(data);
+  print_input_data(data);
 
   return TRUE;
 }
@@ -964,10 +964,9 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   // assign the number of contracted functions to wavefunction size
   data->wavef_size = numberContractedBf[0];
   wf->num_orbitals  = num_orbitals;
-  wf->orb_energies = (float *) calloc(num_orbitals, num_orbitals * sizeof(float));
-  wf->orb_occupancies = (float *) calloc(num_orbitals, num_orbitals * sizeof(float));
-  wf->wave_coeffs = (float *) calloc(num_orbitals * data->wavef_size, num_orbitals *
-                                    data->wavef_size * sizeof(float));
+  wf->orb_energies = (float *) calloc(num_orbitals, sizeof(float));
+  wf->orb_occupancies = (float *) calloc(num_orbitals, sizeof(float));
+  wf->wave_coeffs = (float *) calloc(num_orbitals * data->wavef_size, sizeof(float));
 
   int cnt = 0;
   for (auto en : orbitalEnergies) {
@@ -1012,7 +1011,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     }
     std::cout << wf->wave_coeffs[t] << std::endl;
   }
-  data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
+  // data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
   data->multiplicity = 1;
 
   std::cout << "----------------------------------------" << std::endl;
@@ -1747,6 +1746,7 @@ static int read_orca_rundata(void *mydata,
  **********************************************************/
  // move to top later...
 static void close_orca_read(void *mydata) {
+  printf("Freeing memory.\n");
 
   qmdata_t *data = (qmdata_t *)mydata;
   int i, j;
@@ -1794,19 +1794,19 @@ static void close_orca_read(void *mydata) {
     data->basis_set = NULL;
   }
 
-  for (i=0; i<data->num_frames; i++) {
-    free(data->qm_timestep[i].scfenergies);
-    free(data->qm_timestep[i].gradient);
-    free(data->qm_timestep[i].mulliken_charges);
-    free(data->qm_timestep[i].lowdin_charges);
-    free(data->qm_timestep[i].esp_charges);
-    for (j=0; j<data->qm_timestep[i].numwave; j++) {
-      free(data->qm_timestep[i].wave[j].wave_coeffs);
-      free(data->qm_timestep[i].wave[j].orb_energies);
-      free(data->qm_timestep[i].wave[j].orb_occupancies);
-    }
-    free(data->qm_timestep[i].wave);
-  }
+  // for (i=0; i<data->num_frames; i++) {
+  //   free(data->qm_timestep[i].scfenergies);
+  //   free(data->qm_timestep[i].gradient);
+  //   free(data->qm_timestep[i].mulliken_charges);
+  //   free(data->qm_timestep[i].lowdin_charges);
+  //   free(data->qm_timestep[i].esp_charges);
+  //   for (j=0; j<data->qm_timestep[i].numwave; j++) {
+  //     free(data->qm_timestep[i].wave[j].wave_coeffs);
+  //     free(data->qm_timestep[i].wave[j].orb_energies);
+  //     free(data->qm_timestep[i].wave[j].orb_occupancies);
+  //   }
+  //   free(data->qm_timestep[i].wave);
+  // }
   free(data->qm_timestep);
   free(data->format_specific_data);
   free(data);
