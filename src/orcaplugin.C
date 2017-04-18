@@ -844,6 +844,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   int n[6];
   int wavefunctionRead = 0;
   int firstRead = 1;
+  int haveAngMom = 0;
   while(!wavefunctionRead) {
     float coeff[6], energies[6];
     float occ[6];
@@ -932,13 +933,41 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         }
         blockNumberOfContracted++;
         moCoefficients.push_back(currentMoCoeffs);
-        if (firstRead == 2) {
+        if (firstRead == 2 && !haveAngMom) {
+          int angX = 0, angY = 0, angZ = 0;
           std::string bfn = dumpBasisFunc;
           std::size_t found = bfn.find_first_not_of("0123456789 ");
+          // working version, very much not sophisticated!
           if (found!=std::string::npos) {
-            std::cout << bfn << std::endl;
-            // angu
-            // wfAngMoment.push_back()
+            std::string orbital =  bfn.substr(1);
+            std::vector<std::string> orbList{"s","px","py","pz"};
+            std::vector<std::string>::iterator orbIndex = find(std::begin(orbList), std::end(orbList), orbital);
+            if (std::end(orbList) != orbIndex) {
+              switch ((orbIndex-orbList.begin())) {
+                case 0:
+                  // s-orbital
+                  break;
+                case 1:
+                  angX++;
+                  break;
+                case 2:
+                  angY++;
+                  break;
+                case 3:
+                  angZ++;
+                  break;
+                default:
+                  break;
+              }
+            } else {
+              std::cout << "ERROR." << std::endl;
+              // return FALSE;
+            }
+            std::cout << orbital << std::endl;
+            std::cout << angX << " " << angY << " " << angZ << std::endl;
+            wfAngMoment.push_back(angX);
+            wfAngMoment.push_back(angY);
+            wfAngMoment.push_back(angZ);
           } else {
             printf("orcaplugin) Could not determine BF ang. mom.\n");
             return FALSE;
@@ -948,6 +977,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         // block seems to be finished
         readingBlock = 0;
         numberContractedBf.push_back(blockNumberOfContracted);
+        haveAngMom = 1;
       }
     }
     allCoefficients.push_back(moCoefficients);
@@ -1011,8 +1041,19 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     }
     std::cout << wf->wave_coeffs[t] << std::endl;
   }
-  // data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
+  data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
+
+  std::cout << "wfang: " << wfAngMoment.size() <<  " " << 3*data->wavef_size <<std::endl;
+  for (size_t ang = 0; ang < wfAngMoment.size(); ang++) {
+    data->angular_momentum[ang] = wfAngMoment[ang];
+  }
+
+  // hardcoded for TEST!!!
   data->multiplicity = 1;
+  data->num_occupied_A = 5;
+  data->num_occupied_B = 5;
+  data->num_electrons = 10;
+  data->totalcharge = 0;
 
   std::cout << "----------------------------------------" << std::endl;
   std::cout << "Number of orbitals: " << num_orbitals << std::endl;
