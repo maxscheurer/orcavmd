@@ -268,7 +268,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  print_input_data(data);
+  // print_input_data(data);
 
   return TRUE;
 }
@@ -575,7 +575,8 @@ static int read_first_frame(qmdata_t *data) {
    * which is called by get_traj_frame(). We have obtained
    * the array size wavef_size already from the basis set
    * statistics */
-  data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
+
+  // data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
 
   /* Try reading the first frame.
    * If there is only one frame then also read the
