@@ -772,7 +772,6 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
         }
       }
 
-      std::cout << ts->numwave << std::endl;
       printf("orcaplugin) Wavefunction %s (%s):\n", action, wavef->info);
       printf("orcaplugin)   %d orbitals, %sexcitation %d, multiplicity %d\n",
              wavef->num_orbitals, spinstr, wavef->exci, wavef->mult);
@@ -817,8 +816,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     if(!strcmp(line, "MOLECULAR ORBITALS")) {
       wf->type = MOLFILE_WAVE_CANON;
       strncpy(wf->info, "canonical", MOLFILE_BUFSIZ);
-      wf->has_occup = TRUE;
-      wf->has_orben = TRUE;
     }
   } while(wf->type == MOLFILE_WAVE_UNKNOWN && strcmp(line, "FINAL SINGLE POINT ENERGY"));
 
@@ -942,6 +939,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
           int angX = 0, angY = 0, angZ = 0;
           std::string bfn = dumpBasisFunc;
           std::size_t found = bfn.find_first_not_of("0123456789 ");
+          // TODO: make a better version when higher Ls are supported
           // working version, very much not sophisticated!
           if (found!=std::string::npos) {
             std::string orbital =  bfn.substr(1);
@@ -965,8 +963,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
                   break;
               }
             } else {
-              std::cout << "ERROR." << std::endl;
-              // return FALSE;
+              std::cout << "orcaplugin) ERROR. Only s- and p-shells are supported." << std::endl;
+              return FALSE;
             }
             std::cout << orbital << std::endl;
             std::cout << angX << " " << angY << " " << angZ << std::endl;
@@ -1002,6 +1000,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   wf->orb_energies = (float *) calloc(num_orbitals, sizeof(float));
   wf->orb_occupancies = (float *) calloc(num_orbitals, sizeof(float));
   wf->wave_coeffs = (float *) calloc(num_orbitals * data->wavef_size, sizeof(float));
+  wf->has_occup = TRUE;
+  wf->has_orben = TRUE;
 
   int cnt = 0;
   for (auto en : orbitalEnergies) {
@@ -1424,14 +1424,14 @@ static int read_qm_timestep_metadata(void *mydata,
   }
 
   if (have) {
-    std::cout << "have frame" << std::endl;
+    // std::cout << "have frame" << std::endl;
     int i;
     qm_timestep_t *cur_ts;
 
     /* get a pointer to the current qm timestep */
     cur_ts = data->qm_timestep+data->num_frames_sent;
 
-    std::cout << "numwave: " << cur_ts->numwave << std::endl;
+    // std::cout << "numwave: " << cur_ts->numwave << std::endl;
 
     for (i=0; (i<MOLFILE_MAXWAVEPERTS && i<cur_ts->numwave); i++) {
       meta->num_orbitals_per_wavef[i] = cur_ts->wave[i].num_orbitals;
@@ -1448,7 +1448,7 @@ static int read_qm_timestep_metadata(void *mydata,
     if (cur_ts->gradient) meta->has_gradient = TRUE;
 
   } else {
-    std::cout << "not have frame" << std::endl;
+    // std::cout << "not have frame" << std::endl;
     meta->has_gradient = FALSE;
     meta->num_scfiter  = 0;
     meta->num_orbitals_per_wavef[0] = 0;

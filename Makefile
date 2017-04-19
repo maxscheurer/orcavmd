@@ -466,7 +466,7 @@ ${ARCHDIR}/gamessplugin.o: gamessplugin.c ${PLUGINAPI} qmplugin.h periodic_table
 	$(CC) $(CCFLAGS) $(SHLDFLAGS) $(INCDIR) -c $< $(COPTO)$@
 
 ${ARCHDIR}/orcaplugin.o: orcaplugin.C ${PLUGINAPI} qmplugin.h periodic_table.h unit_conversion.h
-	$(CC) $(CCFLAGS) $(SHLDFLAGS) $(INCDIR) -c $< $(COPTO)$@
+	$(CC) $(CCFLAGS) -g $(SHLDFLAGS) $(INCDIR) -c $< $(COPTO)$@
 
 ${ARCHDIR}/graspplugin.o: graspplugin.C ${PLUGINAPI}
 	$(CXX) $(CXXFLAGS) $(SHLDFLAGS) $(INCDIR) -c $< $(COPTO)$@
@@ -790,7 +790,7 @@ ${ARCHDIR}/gamessplugin-s.o: gamessplugin.c ${PLUGINAPI} qmplugin.h periodic_tab
 
 
 ${ARCHDIR}/orcaplugin-s.o: orcaplugin.C ${PLUGINAPI} qmplugin.h periodic_table.h unit_conversion.h
-	${CC} ${SCCFLAGS} $(INCDIR) $(DEF)"VMDPLUGIN=molfile_orcaplugin" -c $< $(COPTO)$@
+	${CC} ${SCCFLAGS} -g $(INCDIR) $(DEF)"VMDPLUGIN=molfile_orcaplugin" -c $< $(COPTO)$@
 
 ${ARCHDIR}/graspplugin-s.o: graspplugin.C ${PLUGINAPI}
 	${CXX} ${SCXXFLAGS} $(INCDIR) $(DEF)"VMDPLUGIN=molfile_graspplugin" -c $< $(COPTO)$@
