@@ -494,6 +494,7 @@ int get_basis(qmdata_t *data) {
   tempBasis = NULL;
   shell = NULL;
   printf("orcaplugin) Parsed %d uncontracted basis functions.\n", data->num_basis_funcs);
+  free(tempBasisUsed);
 
   // /* allocate and populate flat arrays needed for molfileplugin */
   return fill_basis_arrays(data);
@@ -771,6 +772,7 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
         }
       }
 
+      std::cout << ts->numwave << std::endl;
       printf("orcaplugin) Wavefunction %s (%s):\n", action, wavef->info);
       printf("orcaplugin)   %d orbitals, %sexcitation %d, multiplicity %d\n",
              wavef->num_orbitals, spinstr, wavef->exci, wavef->mult);
@@ -815,6 +817,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     if(!strcmp(line, "MOLECULAR ORBITALS")) {
       wf->type = MOLFILE_WAVE_CANON;
       strncpy(wf->info, "canonical", MOLFILE_BUFSIZ);
+      wf->has_occup = TRUE;
+      wf->has_orben = TRUE;
     }
   } while(wf->type == MOLFILE_WAVE_UNKNOWN && strcmp(line, "FINAL SINGLE POINT ENERGY"));
 
@@ -1420,16 +1424,21 @@ static int read_qm_timestep_metadata(void *mydata,
   }
 
   if (have) {
+    std::cout << "have frame" << std::endl;
     int i;
     qm_timestep_t *cur_ts;
 
     /* get a pointer to the current qm timestep */
     cur_ts = data->qm_timestep+data->num_frames_sent;
 
+    std::cout << "numwave: " << cur_ts->numwave << std::endl;
+
     for (i=0; (i<MOLFILE_MAXWAVEPERTS && i<cur_ts->numwave); i++) {
       meta->num_orbitals_per_wavef[i] = cur_ts->wave[i].num_orbitals;
       meta->has_occup_per_wavef[i]    = cur_ts->wave[i].has_occup;
       meta->has_orben_per_wavef[i]    = cur_ts->wave[i].has_orben;
+      std::cout << "occ: " << cur_ts->wave[i].has_occup << std::endl;
+      std::cout << "energy: " << cur_ts->wave[i].has_orben << std::endl;
     }
     meta->wavef_size      = data->wavef_size;
     meta->num_wavef       = cur_ts->numwave;
@@ -1439,6 +1448,7 @@ static int read_qm_timestep_metadata(void *mydata,
     if (cur_ts->gradient) meta->has_gradient = TRUE;
 
   } else {
+    std::cout << "not have frame" << std::endl;
     meta->has_gradient = FALSE;
     meta->num_scfiter  = 0;
     meta->num_orbitals_per_wavef[0] = 0;
@@ -1545,7 +1555,7 @@ static int read_timestep(void *mydata, int natoms,
   }
 
   /* get a convenient pointer to the current qm timestep */
-  // cur_ts = data->qm_timestep+data->num_frames_sent;
+  cur_ts = data->qm_timestep+data->num_frames_sent;
   //
   // /* store the SCF energies */
   // for (i=0; i<cur_ts->num_scfiter; i++) {
@@ -1587,31 +1597,30 @@ static int read_timestep(void *mydata, int natoms,
   // }
   //
   //
-  // /* store the wave function and orbital energies */
-  // if (cur_ts->wave) {
-  //   for (i=0; i<cur_ts->numwave; i++) {
-  //     qm_wavefunction_t *wave = &cur_ts->wave[i];
-  //     qm_ts->wave[i].type         = wave->type;
-  //     qm_ts->wave[i].spin         = wave->spin;
-  //     qm_ts->wave[i].excitation   = wave->exci;
-  //     qm_ts->wave[i].multiplicity = wave->mult;
-  //     qm_ts->wave[i].energy       = wave->energy;
-  //     strncpy(qm_ts->wave[i].info, wave->info, MOLFILE_BUFSIZ);
-  //
-  //     if (wave->wave_coeffs) {
-  //       memcpy(qm_ts->wave[i].wave_coeffs, wave->wave_coeffs,
-  //              wave->num_orbitals*data->wavef_size*sizeof(float));
-  //     }
-  //     if (wave->orb_energies) {
-  //       memcpy(qm_ts->wave[i].orbital_energies, wave->orb_energies,
-  //              wave->num_orbitals*sizeof(float));
-  //     }
-  //     if (wave->has_occup) {
-  //       memcpy(qm_ts->wave[i].occupancies, wave->orb_occupancies,
-  //              wave->num_orbitals*sizeof(float));
-  //     }
-  //   }
-  // }
+  /* store the wave function and orbital energies */
+  if (cur_ts->wave) {
+    for (i=0; i<cur_ts->numwave; i++) {
+      qm_wavefunction_t *wave = &cur_ts->wave[i];
+      qm_ts->wave[i].type         = wave->type;
+      qm_ts->wave[i].spin         = wave->spin;
+      qm_ts->wave[i].excitation   = wave->exci;
+      qm_ts->wave[i].multiplicity = wave->mult;
+      qm_ts->wave[i].energy       = wave->energy;
+      strncpy(qm_ts->wave[i].info, wave->info, MOLFILE_BUFSIZ);
+
+      if (wave->wave_coeffs) {
+        memcpy(qm_ts->wave[i].wave_coeffs, wave->wave_coeffs, wave->num_orbitals*data->wavef_size*sizeof(float));
+      }
+      if (wave->orb_energies) {
+        memcpy(qm_ts->wave[i].orbital_energies, wave->orb_energies,
+               wave->num_orbitals*sizeof(float));
+      }
+      if (wave->has_occup) {
+        memcpy(qm_ts->wave[i].occupancies, wave->orb_occupancies,
+               wave->num_orbitals*sizeof(float));
+      }
+    }
+  }
   //
   // if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
   //     data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
@@ -1836,19 +1845,19 @@ static void close_orca_read(void *mydata) {
     data->basis_set = NULL;
   }
 
-  // for (i=0; i<data->num_frames; i++) {
-  //   free(data->qm_timestep[i].scfenergies);
-  //   free(data->qm_timestep[i].gradient);
-  //   free(data->qm_timestep[i].mulliken_charges);
-  //   free(data->qm_timestep[i].lowdin_charges);
-  //   free(data->qm_timestep[i].esp_charges);
-  //   for (j=0; j<data->qm_timestep[i].numwave; j++) {
-  //     free(data->qm_timestep[i].wave[j].wave_coeffs);
-  //     free(data->qm_timestep[i].wave[j].orb_energies);
-  //     free(data->qm_timestep[i].wave[j].orb_occupancies);
-  //   }
-  //   free(data->qm_timestep[i].wave);
-  // }
+  for (i=0; i<data->num_frames; i++) {
+    free(data->qm_timestep[i].scfenergies);
+    free(data->qm_timestep[i].gradient);
+    free(data->qm_timestep[i].mulliken_charges);
+    free(data->qm_timestep[i].lowdin_charges);
+    free(data->qm_timestep[i].esp_charges);
+    for (j=0; j<data->qm_timestep[i].numwave; j++) {
+      free(data->qm_timestep[i].wave[j].wave_coeffs);
+      free(data->qm_timestep[i].wave[j].orb_energies);
+      free(data->qm_timestep[i].wave[j].orb_occupancies);
+    }
+    free(data->qm_timestep[i].wave);
+  }
   free(data->qm_timestep);
   free(data->format_specific_data);
   free(data);

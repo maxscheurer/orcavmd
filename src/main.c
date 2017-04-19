@@ -143,13 +143,21 @@ int main(int argc, char *argv[]) {
     timestep.velocities = NULL;
     int nsteps = 0;
     timestep.coords = (float *)malloc(3*natoms*sizeof(float));
-    while (!(rc = cplugin->read_timestep(chandle, natoms, &timestep, NULL, NULL))) {
+    molfile_qm_metadata_t* meta = (molfile_qm_metadata_t*) malloc(sizeof(molfile_qm_metadata_t));
+    molfile_qm_timestep_t* tstp = (molfile_qm_timestep_t*) malloc(sizeof(molfile_qm_timestep_t));
+    tstp->wave = (molfile_qm_wavefunction_t*) calloc(1, sizeof(molfile_qm_wavefunction_t));
+    // tstp->wave =
+    while (!(rc = cplugin->read_timestep(chandle, natoms, &timestep, meta, tstp))) {
       nsteps++;
     // free(timestep.coords);
       // for (int i=0; i<natoms; i++) {
       //   printf("step %d -- x: %f y: %f z: %f\n", nsteps, timestep.coords[3*i  ], timestep.coords[3*i+1], timestep.coords[3*i+2]);
       // }
     }
+    free(timestep.coords);
+    free(meta);
+    free(tstp);
+    timestep.coords = NULL;
     if (rc != MOLFILE_SUCCESS) {
       fprintf(stderr, "FAILED: read_next_timestep returned %d\n", rc);
     } else {

@@ -14,8 +14,8 @@ fi
 echo $filepath
 
 set -e
-gcc main.c -I../../include -c -o main.o
-g++ orcaplugin.C -std=c++11 -isystem../../include -c -o plugin.o
+gcc main.c -g -I../../include -c -o main.o
+g++ orcaplugin.C -g -std=c++11 -isystem../../include -c -o plugin.o
 gcc plugin.o main.o -lstdc++ -lm -o plugintest
 ./plugintest orca $filepath
 
