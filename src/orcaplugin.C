@@ -18,7 +18,7 @@ Inspired from gamessplugin.c
 #include "unit_conversion.h"
 #include "periodic_table.h"
 
-typedef std::vector<std::vector<std::vector<float>>> MoCoeff;
+typedef std::vector<std::vector<std::vector<float> > > MoCoeff;
 
 #define DEBUGGING 1
 #ifdef DEBUGGING
