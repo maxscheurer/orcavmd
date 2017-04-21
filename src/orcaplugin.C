@@ -62,6 +62,8 @@ typedef struct {
                   * */
 } orcadata;
 
+typedef std::vector<std::vector<float>> CoeffRowBlock;
+
 
 /* ######################################################## */
 /*                    static functions                      */
@@ -104,6 +106,8 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts);
 static int fill_basis_arrays(qmdata_t *data);
 
 static int shelltype_int(char type);
+
+static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::string> orbNames);
 
 // for VMD
 static int read_orca_metadata(void *mydata, molfile_qm_metadata_t *metadata);
@@ -781,6 +785,46 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
   return i;
 }
 
+std::vector<std::vector<int>> dAngMom{{1,0,1},{0,1,1},{1,1,0},{2,0,0},{0,2,0},{0,0,2}};
+
+static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::string> orbNames) {
+  CoeffRowBlock resultBlock;
+  // first get the unchanged d-orbitals xz, yz, xy
+  std::vector<std::string> unchangedOrbitals{"xz", "yz", "xy"};
+  std::vector<int> unchangedIndices{1, 2, 4};
+  for (auto idx : unchangedIndices) {
+    resultBlock.push_back(pureBlock[idx]);
+  }
+
+  int alpha = 3;
+  int beta = 0;
+  // now convert the others
+
+  int rows = pureBlock[0].size(); // should be 5 in this case
+
+  std::vector<float> x2;
+  for (size_t i = 0; i < pureBlock[0].size(); i++) {
+    x2.push_back(pureBlock[alpha][i]-pureBlock[beta][i]);
+  }
+
+  std::vector<float> y2;
+  for (size_t i = 0; i < pureBlock[0].size(); i++) {
+    y2.push_back(-pureBlock[beta][i]-pureBlock[alpha][i]);
+  }
+
+  std::vector<float> z2;
+  for (size_t i = 0; i < pureBlock[0].size(); i++) {
+    z2.push_back(2*pureBlock[beta][i]);
+  }
+
+  resultBlock.push_back(x2);
+  resultBlock.push_back(y2);
+  resultBlock.push_back(z2);
+
+
+  return resultBlock;
+}
+
 static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t *wf) {
   std::vector<float> orbitalEnergies;
   std::vector<int> orbitalOccupancies;
@@ -840,6 +884,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   int numReadCoefficients = 0;
   std::vector<int> numberContractedBf;
   std::vector<int> wfAngMoment;
+  std::vector<std::string> orbitalNames;
   MoCoeff allCoefficients;
 
   // orbital indices
@@ -919,7 +964,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     // read them as long as we find new coefficients
     int readingBlock = 1;
     int coefficientNumber = 0;
-    int blockNumberOfContracted = 0;
     while(readingBlock) {
       GET_LINE(buffer, data->file);
       numReadCoefficients = sscanf(buffer, "%s %s %f %f %f %f %f %f", &dumpName, &dumpBasisFunc,
@@ -928,58 +972,29 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
       coefficientNumber = (numReadCoefficients - 2);
       if (coefficientNumber == numReadOrbitalIndices) {
         // std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
-        std::vector<float> currentMoCoeffs;
-        for (size_t cidx = 0; cidx < coefficientNumber; cidx++) {
-          currentMoCoeffs.push_back(coeff[cidx]);
-          // std::cout << coeff[cidx] << std::endl;
-        }
-        blockNumberOfContracted++;
-        moCoefficients.push_back(currentMoCoeffs);
         if (firstRead == 2 && !haveAngMom) {
-          int angX = 0, angY = 0, angZ = 0;
           std::string bfn = dumpBasisFunc;
           std::size_t found = bfn.find_first_not_of("0123456789 ");
           // TODO: make a better version when higher Ls are supported
           // working version, very much not sophisticated!
           if (found!=std::string::npos) {
             std::string orbital =  bfn.substr(1);
-            std::vector<std::string> orbList{"s","px","py","pz"};
-            std::vector<std::string>::iterator orbIndex = find(std::begin(orbList), std::end(orbList), orbital);
-            if (std::end(orbList) != orbIndex) {
-              switch ((orbIndex-orbList.begin())) {
-                case 0:
-                  // s-orbital
-                  break;
-                case 1:
-                  angX++;
-                  break;
-                case 2:
-                  angY++;
-                  break;
-                case 3:
-                  angZ++;
-                  break;
-                default:
-                  break;
-              }
-            } else {
-              std::cout << "orcaplugin) ERROR. Only s- and p-shells are supported." << std::endl;
-              return FALSE;
-            }
-            std::cout << orbital << std::endl;
-            std::cout << angX << " " << angY << " " << angZ << std::endl;
-            wfAngMoment.push_back(angX);
-            wfAngMoment.push_back(angY);
-            wfAngMoment.push_back(angZ);
+            orbitalNames.push_back(orbital);
           } else {
-            printf("orcaplugin) Could not determine BF ang. mom.\n");
+            printf("orcaplugin) Could not determine orbital description.\n");
             return FALSE;
           }
         }
+        // reading coefficients
+        std::vector<float> currentMoCoeffs;
+        for (size_t cidx = 0; cidx < coefficientNumber; cidx++) {
+          currentMoCoeffs.push_back(coeff[cidx]);
+          // std::cout << coeff[cidx] << std::endl;
+        }
+        moCoefficients.push_back(currentMoCoeffs);
       } else {
         // block seems to be finished
         readingBlock = 0;
-        numberContractedBf.push_back(blockNumberOfContracted);
         haveAngMom = 1;
       }
     }
@@ -993,6 +1008,101 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     }
     return FALSE;
   }
+
+  // now loop over MO blocks and convert coefficients if needed
+  int readingPureFunction = 0;
+  std::vector<std::vector<float>> pureFunction;
+  std::vector<std::string> pureFunctionName;
+  int expectedNumberOfPureFunctions = 0;
+  std::vector<std::string> orbList{"s","px","py","pz","dz2","dxz","dyz","dx2y2","dxy"};
+  int orbRowIndex = 0;
+  int blockIdx = 0;
+
+  for (auto name : orbitalNames) {
+    std::cout << name << std::endl;
+  }
+
+  MoCoeff newAllCoefficients;
+
+  for (auto moBlock : allCoefficients) {
+    CoeffRowBlock newRows;
+    int blockNumberOfContracted = 0;
+    for (auto moRow : moBlock) {
+      int angX = 0, angY = 0, angZ = 0;
+      std::string orbital = orbitalNames[orbRowIndex];
+      std::vector<std::string>::iterator orbIndex = find(std::begin(orbList), std::end(orbList), orbital);
+      if (std::end(orbList) != orbIndex) {
+        int listIndex = orbIndex-orbList.begin();
+        switch (listIndex) {
+          case 0:
+            break;
+          case 1:
+            angX = 1;
+            break;
+          case 2:
+            angY = 1;
+            break;
+          case 3:
+            angZ = 1;
+            break;
+          default:
+            break;
+        }
+        // d-shell found
+        std::cout << "orbital index: " << orbIndex-orbList.begin() << " " << orbital << std::endl;
+        if (listIndex > 3) {
+          if (!readingPureFunction) {
+            pureFunction.clear();
+            pureFunctionName.clear();
+            expectedNumberOfPureFunctions = 5;
+            readingPureFunction = 1;
+            pureFunction.push_back(moRow);
+            pureFunctionName.push_back(orbital);
+          } else {
+            pureFunction.push_back(moRow);
+            pureFunctionName.push_back(orbital);
+            if (pureFunction.size() == expectedNumberOfPureFunctions) {
+              std::cout << "found complete pure function set." << std::endl;
+              CoeffRowBlock newBlock = convertPure(pureFunction, pureFunctionName);
+              blockNumberOfContracted+= newBlock.size();
+              for (auto r : newBlock) {
+                newRows.push_back(r);
+              }
+              if (!blockIdx) {
+                for (size_t i = 0; i < newBlock.size(); i++) {
+                  for (auto angMom : dAngMom[i]) {
+                    wfAngMoment.push_back(angMom);
+                  }
+                }
+              }
+              readingPureFunction = 0;
+            }
+          }
+        } else {
+          newRows.push_back(moRow);
+          blockNumberOfContracted++;
+          if (!blockIdx) {
+            wfAngMoment.push_back(angX);
+            wfAngMoment.push_back(angY);
+            wfAngMoment.push_back(angZ);
+          }
+        }
+      } else {
+        std::cout << "orcaplugin) ERROR. Only s/p/d-shells are supported." << std::endl;
+        return FALSE;
+      }
+
+      // for (auto moCo : moRow) {
+      //
+      // }
+      orbRowIndex++;
+    }
+    numberContractedBf.push_back(blockNumberOfContracted);
+    newAllCoefficients.push_back(newRows);
+    orbRowIndex = 0;
+    blockIdx++;
+  }
+
 
   // assign the number of contracted functions to wavefunction size
   data->wavef_size = numberContractedBf[0];
@@ -1014,10 +1124,11 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     cnt++;
   }
 
-  int rowIndex = 0, columnIndex = 0, blockIdx = 0;
+  int rowIndex = 0, columnIndex = 0;
+  blockIdx = 0;
   int moBlockSize = 0;
   int moBlockIdx = 0;
-  for (auto moBlock : allCoefficients) {
+  for (auto moBlock : newAllCoefficients) {
     for (auto moRow : moBlock) {
       std::cout << rowIndex << std::endl;
       for (auto moCo : moRow) {
@@ -1026,6 +1137,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
           std::cout << "something went wrong:" << (columnIndex * data->wavef_size + rowIndex) << " vs. " << num_orbitals * data->wavef_size << std::endl;
           return FALSE;
         }
+        // std::cout << orbitalNames[rowIndex] << std::endl;
         wf->wave_coeffs[columnIndex * data->wavef_size + rowIndex] = moCo;
         columnIndex++;
       }
@@ -1037,11 +1149,11 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     moBlockSize += moBlock[moBlockIdx].size();
     columnIndex = moBlockSize;
     moBlockIdx++;
-    std::cout << "bs: " << moBlockSize << std::endl;
+    // std::cout << "bs: " << moBlockSize << std::endl;
   }
 
   for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
-    if (t % num_orbitals == 0) {
+    if (t % data->wavef_size == 0) {
       std::cout << "---------- " << t/num_orbitals << std::endl;
     }
     std::cout << wf->wave_coeffs[t] << std::endl;
@@ -1053,6 +1165,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     data->angular_momentum[ang] = wfAngMoment[ang];
   }
 
+  // TODO: REMOVE!!!
   // hardcoded for TEST!!!
   data->multiplicity = 1;
   data->num_occupied_A = 5;
@@ -1066,10 +1179,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   std::cout << "----------------------------------------" << std::endl;
 
   return TRUE;
-}
-
-static int angular_momentum(std::string orbitalName) {
-  return 0;
 }
 
 /******************************************************
