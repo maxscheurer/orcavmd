@@ -18,6 +18,7 @@ Inspired from gamessplugin.c
 #include "qmplugin.h"
 #include "unit_conversion.h"
 #include "periodic_table.h"
+#include "Matrix.h"
 
 typedef std::vector<std::vector<std::vector<float> > > MoCoeff;
 
@@ -789,6 +790,9 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
 std::vector<std::vector<int>> dAngMom{{1,0,1},{0,1,1},{1,1,0},{2,0,0},{0,2,0},{0,0,2}};
 
 static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::string> orbNames) {
+  Matrix *m = new Matrix("{{0,2,3},{1,2,4}}");
+  m->printMatrix();
+  delete m;
   CoeffRowBlock resultBlock;
   // first get the unchanged d-orbitals xz, yz, xy
   std::vector<std::string> unchangedOrbitals{"xz", "yz", "xy"};
@@ -1068,6 +1072,10 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
               blockNumberOfContracted+= newBlock.size();
               for (auto r : newBlock) {
                 newRows.push_back(r);
+                for (auto c : r) {
+                  std::cout << c << " ";
+                }
+                std::cout << std::endl;
               }
               if (!blockIdx) {
                 for (size_t i = 0; i < newBlock.size(); i++) {

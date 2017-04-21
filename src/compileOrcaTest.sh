@@ -15,8 +15,9 @@ echo $filepath
 
 set -e
 gcc main.c -g -I../../include -c -o main.o
+g++ Matrix.cpp -g -std=c++11 -c -o Matrix.o
 g++ orcaplugin.C -g -std=c++11 -isystem../../include -c -o plugin.o
-gcc plugin.o main.o -lstdc++ -lm -o plugintest
+gcc plugin.o main.o Matrix.o -lstdc++ -lm -o plugintest
 ./plugintest orca $filepath
 
 #make LINUXAMD64 -j9; sudo cp compile/lib_LINUXAMD64/molfile/orcaplugin.so /usr/local/lib/vmd/plugins/LINUXAMD64/molfile/
