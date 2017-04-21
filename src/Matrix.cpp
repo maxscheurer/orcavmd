@@ -433,7 +433,7 @@ int Matrix::rang(Matrix *input)  //Funktioniert noch nicht zuverlässig.
 
 Matrix* Matrix::multiply(Matrix *firstMatrix, Matrix *secondMatrix)
 {
-    if (firstMatrix->columns == secondMatrix->rows && firstMatrix->rows == secondMatrix->columns) {
+    if (firstMatrix->columns == secondMatrix->rows) {
         double **matrix = 0;
         matrix = new double *[firstMatrix->rows];
         for (int i = 0; i < firstMatrix->rows; i++) {
@@ -456,6 +456,8 @@ Matrix* Matrix::multiply(Matrix *firstMatrix, Matrix *secondMatrix)
         return result;
     } else {
         cout << "Multiplication not possible." << endl;
+        cout << "fmc:" << firstMatrix->columns << " smc:" << secondMatrix->columns << endl;
+        cout << "fmr:" << firstMatrix->rows << " smr:" << secondMatrix->rows << endl;
         return nullptr;
     }
 }

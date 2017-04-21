@@ -113,7 +113,7 @@ static int fill_basis_arrays(qmdata_t *data);
 
 static int shelltype_int(char type);
 
-static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::string> orbNames);
+static CoeffRowBlock convertPure(CoeffRowBlock pureBlock);
 
 // for VMD
 static int read_orca_metadata(void *mydata, molfile_qm_metadata_t *metadata);
@@ -792,16 +792,43 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
 }
 
 std::vector<std::vector<int>> dAngMom{{1,0,1},{0,1,1},{1,1,0},{2,0,0},{0,2,0},{0,0,2}};
+std::vector<std::vector<int>> fAngMom{{1,1,1},{2,1,0},{2,0,1},{1,2,0},{0,2,1},{1,0,2},
+{0,1,2},{3,0,0},{0,3,0},{0,0,3}};
 
-static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::string> orbNames) {
+typedef enum {
+  dshell, fshell
+} Shelltype;
+
+static CoeffRowBlock convertPure(CoeffRowBlock pureBlock) {
+  Shelltype stype;
+  CoeffRowBlock resultBlock;
+  switch (pureBlock.size()) {
+    case 5:
+      stype = dshell;
+      break;
+    case 7:
+      stype = fshell;
+      break;
+    default:
+      return resultBlock;
+  }
+
   Matrix *m = new Matrix(pureBlock);
-  Matrix *multiplication = Matrix::multiply(convD, m);
+  Matrix *multiplication;
+  if (stype == dshell) {
+    multiplication = Matrix::multiply(convD, m);
+  } else if (stype == fshell) {
+    multiplication = Matrix::multiply(convF, m);
+  } else {
+    return resultBlock;
+  }
   m->printMatrix();
   multiplication->printMatrix();
-  CoeffRowBlock resultBlock = multiplication->toVector();
+  resultBlock = multiplication->toVector();
   delete multiplication;
   delete m;
 
+  // OLD CODE!
   // first get the unchanged d-orbitals xz, yz, xy
   // std::vector<std::string> unchangedOrbitals{"xz", "yz", "xy"};
   // std::vector<int> unchangedIndices{1, 2, 4};
@@ -833,7 +860,6 @@ static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::strin
   // resultBlock.push_back(x2);
   // resultBlock.push_back(y2);
   // resultBlock.push_back(z2);
-
 
   return resultBlock;
 }
@@ -1027,7 +1053,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   std::vector<std::vector<float>> pureFunction;
   std::vector<std::string> pureFunctionName;
   int expectedNumberOfPureFunctions = 0;
-  std::vector<std::string> orbList{"s","px","py","pz","dz2","dxz","dyz","dx2y2","dxy"};
+  std::vector<std::string> orbList{"s","px","py","pz","dz2","dxz","dyz","dx2y2","dxy",
+  "f0","f+1","f-1","f+2","f-2","f+3","f-3"};
   int orbRowIndex = 0;
   int blockIdx = 0;
 
@@ -1067,7 +1094,13 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
           if (!readingPureFunction) {
             pureFunction.clear();
             pureFunctionName.clear();
-            expectedNumberOfPureFunctions = 5;
+            if (orbital.compare(0, 1, "d") == 0) {
+              expectedNumberOfPureFunctions = 5;
+              std::cout << "Trying to read d-functions." << std::endl;
+            } else if (orbital.compare(0, 1, "f") == 0) {
+              expectedNumberOfPureFunctions = 7;
+              std::cout << "Trying to read f-functions." << std::endl;
+            }
             readingPureFunction = 1;
             pureFunction.push_back(moRow);
             pureFunctionName.push_back(orbital);
@@ -1076,7 +1109,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
             pureFunctionName.push_back(orbital);
             if (pureFunction.size() == expectedNumberOfPureFunctions) {
               std::cout << "found complete pure function set." << std::endl;
-              CoeffRowBlock newBlock = convertPure(pureFunction, pureFunctionName);
+              CoeffRowBlock newBlock = convertPure(pureFunction);
               blockNumberOfContracted+= newBlock.size();
               for (auto r : newBlock) {
                 newRows.push_back(r);
@@ -1087,8 +1120,14 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
               }
               if (!blockIdx) {
                 for (size_t i = 0; i < newBlock.size(); i++) {
-                  for (auto angMom : dAngMom[i]) {
-                    wfAngMoment.push_back(angMom);
+                  if (expectedNumberOfPureFunctions == 5) {
+                    for (auto angMom : dAngMom[i]) {
+                      wfAngMoment.push_back(angMom);
+                    }
+                  } else if (expectedNumberOfPureFunctions == 7) {
+                    for (auto angMom : fAngMom[i]) {
+                      wfAngMoment.push_back(angMom);
+                    }
                   }
                 }
               }
