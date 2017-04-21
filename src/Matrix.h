@@ -15,6 +15,8 @@ public:
 
     Matrix();
     Matrix(std::string input);
+    // template <typename T>
+    Matrix(std::vector<std::vector<float>> input);
     ~Matrix();
     double** parseInput(std::string input);
 

@@ -20,7 +20,7 @@ Inspired from gamessplugin.c
 #include "periodic_table.h"
 #include "Matrix.h"
 
-typedef std::vector<std::vector<std::vector<float> > > MoCoeff;
+typedef std::vector<std::vector<std::vector<float>>> MoCoeff;
 
 #define DEBUGGING 1
 #ifdef DEBUGGING
@@ -65,6 +65,10 @@ typedef struct {
 } orcadata;
 
 typedef std::vector<std::vector<float>> CoeffRowBlock;
+
+// Matrix for conversion of pure coefficients to cartesian coefficients, d- and f-shell
+Matrix *convD = new Matrix("{{0,1,0,0,0},{0,0,1,0,0},{0,0,0,0,1},{-1,0,0,1,0},{-1,0,0,-1,0},{2,0,0,0,0}}");
+Matrix *convF = new Matrix("{{0,0,0,0,1,0,0},{0,0,-1,0,0,0,3},{-3,0,0,1,0,0,0},{0,-1,0,0,0,-3,0},{-3,0,0,-1,0,0,0},{0,4,0,0,0,0,0},{0,0,4,0,0,0,0},{0,-1,0,0,0,1,0},{0,0,-1,0,0,0,-1},{2,0,0,0,0,0,0}}");
 
 
 /* ######################################################## */
@@ -790,9 +794,12 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
 std::vector<std::vector<int>> dAngMom{{1,0,1},{0,1,1},{1,1,0},{2,0,0},{0,2,0},{0,0,2}};
 
 static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::string> orbNames) {
-  Matrix *m = new Matrix("{{0,2,3},{1,2,4}}");
+  Matrix *m = new Matrix(pureBlock);
+  Matrix *multiplication = Matrix::multiply(convD, m);
   m->printMatrix();
+  multiplication->printMatrix();
   delete m;
+  delete multiplication;
   CoeffRowBlock resultBlock;
   // first get the unchanged d-orbitals xz, yz, xy
   std::vector<std::string> unchangedOrbitals{"xz", "yz", "xy"};

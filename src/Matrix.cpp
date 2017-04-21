@@ -77,6 +77,29 @@ Matrix::Matrix()
     columns = 0;
 }
 
+// template <typename T>
+Matrix::Matrix(std::vector<std::vector<float>> input) {
+    rows = input.size();
+    columns = input[0].size();
+    value = new double *[rows];
+    for (size_t i = 0; i < rows; i++) {
+        value[i] = new double [columns];
+        if (columns != input[i].size()) {
+            cout << "Matrix rows have different number of columns." << endl;
+            return;
+        }
+    }
+    int row = 0, col = 0;
+    for (auto r : input) {
+        for (auto v : r) {
+            value[row][col] = v;
+            col++;
+        }
+        row++;
+        col = 0;
+    }
+}
+
 Matrix::~Matrix()
 {
     for (size_t i = 0; i < rows; i++) {
@@ -408,7 +431,11 @@ Matrix* Matrix::multiply(Matrix *firstMatrix, Matrix *secondMatrix)
 
         for (int y = 0; y < firstMatrix->rows; y++) {
             for (int x = 0; x < secondMatrix->columns; x++) {
-                matrix[y][x] = dotProduct(rowAtIndex(firstMatrix, y), columnAtIndex(secondMatrix, x));
+                auto r = rowAtIndex(firstMatrix, y);
+                auto c = columnAtIndex(secondMatrix, x);
+                matrix[y][x] = dotProduct(r, c);
+                delete r;
+                delete c;
             }
         }
         Matrix *result = new Matrix();
@@ -442,7 +469,6 @@ void Matrix::printMatrix(Matrix *matrix)
 
 void Matrix::printMatrix()
 {
-    cout << "printing matrix" << endl;
     if (value != nullptr) {
         for (int y = 0; y < rows; y++) {
             for (int x = 0; x < columns; x++) {
