@@ -798,40 +798,41 @@ static CoeffRowBlock convertPure(CoeffRowBlock pureBlock, std::vector<std::strin
   Matrix *multiplication = Matrix::multiply(convD, m);
   m->printMatrix();
   multiplication->printMatrix();
-  delete m;
+  CoeffRowBlock resultBlock = multiplication->toVector();
   delete multiplication;
-  CoeffRowBlock resultBlock;
+  delete m;
+
   // first get the unchanged d-orbitals xz, yz, xy
-  std::vector<std::string> unchangedOrbitals{"xz", "yz", "xy"};
-  std::vector<int> unchangedIndices{1, 2, 4};
-  for (auto idx : unchangedIndices) {
-    resultBlock.push_back(pureBlock[idx]);
-  }
-
-  int alpha = 3;
-  int beta = 0;
-  // now convert the others
-
-  int rows = pureBlock[0].size(); // should be 5 in this case
-
-  std::vector<float> x2;
-  for (size_t i = 0; i < pureBlock[0].size(); i++) {
-    x2.push_back(pureBlock[alpha][i]-pureBlock[beta][i]);
-  }
-
-  std::vector<float> y2;
-  for (size_t i = 0; i < pureBlock[0].size(); i++) {
-    y2.push_back(-pureBlock[beta][i]-pureBlock[alpha][i]);
-  }
-
-  std::vector<float> z2;
-  for (size_t i = 0; i < pureBlock[0].size(); i++) {
-    z2.push_back(2*pureBlock[beta][i]);
-  }
-
-  resultBlock.push_back(x2);
-  resultBlock.push_back(y2);
-  resultBlock.push_back(z2);
+  // std::vector<std::string> unchangedOrbitals{"xz", "yz", "xy"};
+  // std::vector<int> unchangedIndices{1, 2, 4};
+  // for (auto idx : unchangedIndices) {
+  //   resultBlock.push_back(pureBlock[idx]);
+  // }
+  //
+  // int alpha = 3;
+  // int beta = 0;
+  // // now convert the others
+  //
+  // int rows = pureBlock[0].size(); // should be 5 in this case
+  //
+  // std::vector<float> x2;
+  // for (size_t i = 0; i < pureBlock[0].size(); i++) {
+  //   x2.push_back(pureBlock[alpha][i]-pureBlock[beta][i]);
+  // }
+  //
+  // std::vector<float> y2;
+  // for (size_t i = 0; i < pureBlock[0].size(); i++) {
+  //   y2.push_back(-pureBlock[beta][i]-pureBlock[alpha][i]);
+  // }
+  //
+  // std::vector<float> z2;
+  // for (size_t i = 0; i < pureBlock[0].size(); i++) {
+  //   z2.push_back(2*pureBlock[beta][i]);
+  // }
+  //
+  // resultBlock.push_back(x2);
+  // resultBlock.push_back(y2);
+  // resultBlock.push_back(z2);
 
 
   return resultBlock;

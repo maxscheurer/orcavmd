@@ -23,6 +23,7 @@ public:
     static double stringToDouble(std::string& s);
     static void printMatrix(Matrix *matrix);
     void printMatrix();
+    std::vector<std::vector<float>> toVector();
     static std::vector<double>* rowAtIndex(Matrix *input, unsigned int index);
     static std::vector<double>* columnAtIndex(Matrix *input, unsigned int index);
     static double dotProduct(std::vector<double> *firstVector, std::vector<double> *secondVector);

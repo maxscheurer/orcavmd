@@ -108,6 +108,17 @@ Matrix::~Matrix()
     delete[] value;
 }
 
+std::vector<std::vector<float>> Matrix::toVector() {
+    std::vector<std::vector<float>> result;
+    for (size_t i = 0; i < rows; i++) {
+        std::vector<float> tmpRow;
+        for (size_t j = 0; j < columns; j++) {
+            tmpRow.push_back(value[i][j]);
+        }
+        result.push_back(tmpRow);
+    }
+    return result;
+}
 
 Matrix* Matrix::copyMatrix(Matrix *input)
 {
