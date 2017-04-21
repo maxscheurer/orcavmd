@@ -1,6 +1,7 @@
 /*
 Orca VMD plugin
 Authors: Maximilian Scheurer, Marcelo Melo, April 2017
+Contributions from: Michael F. Herbst
 Inspired from gamessplugin.c
  */
 
