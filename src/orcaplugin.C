@@ -1152,10 +1152,13 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     // std::cout << "bs: " << moBlockSize << std::endl;
   }
 
+  float coeff2 = 0;
   for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
     if (t % data->wavef_size == 0) {
-      std::cout << "---------- " << t/num_orbitals << std::endl;
+      std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
+      coeff2 = 0;
     }
+    coeff2 += wf->wave_coeffs[t]*wf->wave_coeffs[t];
     std::cout << wf->wave_coeffs[t] << std::endl;
   }
   data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
