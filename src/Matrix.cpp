@@ -212,6 +212,18 @@ double Matrix::getNorm(std::vector<double> *firstVector){
     return result;
 }
 
+void Matrix::normalizeRows() {
+  double norm;
+  int counter = 0;
+  std::vector<std::vector<double>> m = this->toVector();
+  for (auto r : m) {
+    norm = Matrix::getNorm(r);
+    Matrix::multiplyRow(this, counter, 1.0/norm);
+    counter++;
+  }
+  printMatrix();
+}
+
 double Matrix::getAngle(std::vector<double> *firstVector,std::vector<double> *secondVector) {
     double result = 0.0;
     if (firstVector != nullptr && secondVector != nullptr) {
