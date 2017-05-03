@@ -67,7 +67,9 @@ typedef struct {
 typedef std::vector<std::vector<float>> CoeffRowBlock;
 
 // Matrix for conversion of pure coefficients to cartesian coefficients, d- and f-shell
-Matrix *convD = new Matrix("{{0,1,0,0,0},{0,0,1,0,0},{0,0,0,0,1},{-1,0,0,1,0},{-1,0,0,-1,0},{2,0,0,0,0}}");
+Matrix *convD = new Matrix("{{0,1,0,0,0},{0,0,1,0,0},{0,0,0,0,1},{-1,0,0,1,0},"
+                            "{-1, 0, 0,-1, 0},"
+                            "{ 2, 0, 0, 0, 0}}");
 Matrix *convF = new Matrix("{{0,0,0,0,1,0,0},{0,0,-1,0,0,0,3},{-3,0,0,1,0,0,0},{0,-1,0,0,0,-3,0},{-3,0,0,-1,0,0,0},{0,4,0,0,0,0,0},{0,0,4,0,0,0,0},{0,-1,0,0,0,1,0},{0,0,-1,0,0,0,-1},{2,0,0,0,0,0,0}}");
 
 
