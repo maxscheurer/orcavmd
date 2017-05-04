@@ -13,4 +13,5 @@ For compilation, the VMD plugin include directory is needed! (i.e. ../../include
 - Jobtypes:
   * Semiempirical Methods
   * Geometry Optimizations
+  * Excited State Calculations
   * Born-Oppenheimer MD
