@@ -349,18 +349,11 @@ int get_basis(qmdata_t *data) {
   shell_t *shell;
   long filepos;
 
-  // TODO: needed for PM3
-  // if (!strcmp(data->gbasis, "MNDO") ||
-  //     !strcmp(data->gbasis, "AM1")  ||
-  //     !strcmp(data->gbasis, "PM3")) {
-  //   /* Semiempirical methods are based on STOs.
-  //    * The only parameter we need for orbital rendering
-  //    * are the exponents zeta for S, P, D,... shells for
-  //    * each atom. Since GAMESS doesn't print these values
-  //    * we skip reading the basis set and hardcode the
-  //    * parameters in tables in VMD. */
-  //   return TRUE;
-  // }
+  if (!strcmp(data->gbasis, "MNDO") ||
+      !strcmp(data->gbasis, "AM1")  ||
+      !strcmp(data->gbasis, "PM3")) {
+    return TRUE;
+  }
 
   /* Search for "ATOMIC BASIS SET" line */
   if (pass_keyline(data->file, "BASIS SET IN INPUT FORMAT", NULL) != FOUND ) {
@@ -1028,12 +1021,13 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         // std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
         if (firstRead == 2 && !haveAngMom) {
           std::string bfn = dumpBasisFunc;
-          std::size_t found = bfn.find_first_not_of("0123456789 ");
+          std::size_t found = bfn.find_first_not_of("-0123456789 ");
           // TODO: make a better version when higher Ls are supported
           // working version, very much not sophisticated!
           if (found!=std::string::npos) {
-            std::string orbital =  bfn.substr(1);
+            std::string orbital =  bfn.substr(found);
             orbitalNames.push_back(orbital);
+            std::cout << orbital << std::endl;
           } else {
             printf("orcaplugin) Could not determine orbital description.\n");
             return FALSE;
@@ -1073,9 +1067,9 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   int orbRowIndex = 0;
   int blockIdx = 0;
 
-  for (auto name : orbitalNames) {
-    std::cout << name << std::endl;
-  }
+  // for (auto name : orbitalNames) {
+  //   std::cout << name << std::endl;
+  // }
 
   MoCoeff newAllCoefficients;
 
