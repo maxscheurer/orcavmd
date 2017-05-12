@@ -15,6 +15,7 @@ Inspired from gamessplugin.c
 #include <iostream>
 #include <algorithm>
 #include <string>
+#include <cctype>
 #include "qmplugin.h"
 #include "unit_conversion.h"
 #include "periodic_table.h"
@@ -321,7 +322,7 @@ static int get_job_info(qmdata_t *data) {
 				if (lContent.find(method) != std::string::npos) {
 					const char *m = method.c_str();
 					strncpy(data->gbasis, m, sizeof(char)*strlen(m));
-					strncpy(data->basis_string, "VSTO-3G", sizeof(char)*strlen("VSTO-3G"));
+					strncpy(data->basis_string, "STO-3G", sizeof(char)*strlen("STO-3G"));
 					std::cout << "semiemp. used" << std::endl;
 					break;
 				}
@@ -331,6 +332,14 @@ static int get_job_info(qmdata_t *data) {
 			endOfInput = 1;
 		}
 	}
+
+  data->runtype = MOLFILE_RUNTYPE_ENERGY;
+  std::string lower = inputFile[0];
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+  if (lower.find("opt") != std::string::npos) {
+    data->runtype = MOLFILE_RUNTYPE_OPTIMIZE;
+    std::cout << "orcaplugin) Optimization loaded." << std::endl;
+  }
 
 	return TRUE;
 }
@@ -778,11 +787,11 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   cur_ts = data->qm_timestep + data->num_frames_read;
 
   // debugging the trajectory reading file positions
-  // printf("nfread: %d \n", data->num_frames_read);
-  // if (!data->filepos_array) {
-  //   printf("filepos array empty!!!\n");
-  //   return FALSE;
-  // }
+  printf("nfread: %d \n", data->num_frames_read);
+  if (!data->filepos_array) {
+    printf("filepos array empty!!!\n");
+    return FALSE;
+  }
 
   fseek(data->file, data->filepos_array[data->num_frames_read], SEEK_SET);
 
@@ -1587,7 +1596,7 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
   /* currently, only one frame is supported!
    * lines 3130-3348 in gamessplugin.c
    */
-  if (TRUE) {
+  if (data->runtype == MOLFILE_RUNTYPE_ENERGY) {
     /* We have just one frame */
     data->num_frames = 1;
     pass_keyline(data->file, "Single Point Calculation", NULL);
@@ -1612,6 +1621,9 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
     memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
 
     return TRUE;
+  } else {
+    std::cout << "orcaplugin) Jobtype not supported for trajectory reading." << std::endl;
+    return FALSE;
   }
 
   printf("orcaplugin) Analyzing trajectory...\n");
@@ -1620,24 +1632,6 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
   while (0) {
     if (!fgets(buffer, sizeof(buffer), data->file)) break;
     line = trimleft(buffer);
-
-    /* at this point we have to distinguish between
-     * pre="27 JUN 2005 (R2)" and "27 JUN 2005 (R2)"
-     * versions since the output format for geometry
-     * optimizations has changed */
-
-    // if (gms->version==FIREFLY8POST6695){
-    //   strcpy(nserch, "NSERCH=");
-    // }
-    // else if (gms->version==FIREFLY8PRE6695) {
-    //   strcpy(nserch, "1NSERCH=");
-    // }
-    // else if (gms->version==GAMESSPRE20050627) {
-    //   strcpy(nserch, "1NSERCH=");
-    // }
-    // else if (gms->version==GAMESSPOST20050627) {
-    //   strcpy(nserch, "BEGINNING GEOMETRY SEARCH POINT NSERCH=");
-    // }
 
     if (strstr(line, nserch) ||
         strstr(line, "---- SURFACE MAPPING GEOMETRY") ||
