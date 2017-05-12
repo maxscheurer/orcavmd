@@ -354,7 +354,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  // print_input_data(data);
+  print_input_data(data);
 
   return TRUE;
 }
