@@ -256,7 +256,6 @@ static int get_job_info(qmdata_t *data) {
 	char buffer[BUFSIZ];
 	filepos = ftell(data->file);
 	if (goto_keyline(data->file, "INPUT FILE", NULL)) {
-		thisline(data->file);
 		eatline(data->file, 3);
 	}
 	std::vector<std::string> inputFile;
@@ -264,7 +263,6 @@ static int get_job_info(qmdata_t *data) {
 	while(!endOfInput) {
 		GET_LINE(buffer, data->file);
 		std::string test(buffer);
-		std::cout << test << std::endl;
 		auto ln = test.find_first_of("123456789");
 		auto beforeLine = test.find_first_of(">");
 		int lineNumber = stoi(test.substr(ln,beforeLine-ln));
@@ -282,6 +280,7 @@ static int get_job_info(qmdata_t *data) {
 				if (lContent.find(method) != std::string::npos) {
 					const char *m = method.c_str();
 					strncpy(data->gbasis, m, sizeof(char)*strlen(m));
+					strncpy(data->basis_string, "STO-3G", sizeof(char)*strlen("STO-3G"));
 					std::cout << "semiemp. used" << std::endl;
 					break;	
 				}
@@ -292,7 +291,7 @@ static int get_job_info(qmdata_t *data) {
 		}
 	}
 	
-	return FALSE;
+	return TRUE;
 }
 
 static int have_orca(qmdata_t *data, orcadata* orca) {
