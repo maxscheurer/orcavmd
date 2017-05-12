@@ -236,6 +236,24 @@ static int read_orca_structure(void *mydata, int *optflags, molfile_atom_t *atom
   return MOLFILE_SUCCESS;
 }
 
+template<typename Out>
+void split(const std::string &s, char delim, Out result) {
+    std::stringstream ss;
+    ss.str(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        *(result++) = item;
+    }
+}
+
+
+std::vector<std::string> split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    split(s, delim, std::back_inserter(elems));
+    return elems;
+}
+
+
 std::string trim(const std::string& str,
                  const std::string& whitespace = " \t")
 {
@@ -247,6 +265,29 @@ std::string trim(const std::string& str,
     const auto strRange = strEnd - strBegin + 1;
 
     return str.substr(strBegin, strRange);
+}
+
+std::string reduce(const std::string& str,
+                   const std::string& fill = " ",
+                   const std::string& whitespace = " \t")
+{
+    // trim first
+    auto result = trim(str, whitespace);
+
+    // replace sub ranges
+    auto beginSpace = result.find_first_of(whitespace);
+    while (beginSpace != std::string::npos)
+    {
+        const auto endSpace = result.find_first_not_of(whitespace, beginSpace);
+        const auto range = endSpace - beginSpace;
+
+        result.replace(beginSpace, range, fill);
+
+        const auto newStart = beginSpace + fill.length();
+        beginSpace = result.find_first_of(whitespace, newStart);
+    }
+
+    return result;
 }
 
 std::vector<std::string> semiempiricals({"MNDO","PM3","AM1"});
@@ -280,17 +321,17 @@ static int get_job_info(qmdata_t *data) {
 				if (lContent.find(method) != std::string::npos) {
 					const char *m = method.c_str();
 					strncpy(data->gbasis, m, sizeof(char)*strlen(m));
-					strncpy(data->basis_string, "STO-3G", sizeof(char)*strlen("STO-3G"));
+					strncpy(data->basis_string, "VSTO-3G", sizeof(char)*strlen("VSTO-3G"));
 					std::cout << "semiemp. used" << std::endl;
-					break;	
+					break;
 				}
-			}		
+			}
 		}
 		if (test.find("END OF INPUT") !=std::string::npos) {
 			endOfInput = 1;
 		}
 	}
-	
+
 	return TRUE;
 }
 
@@ -409,15 +450,17 @@ int get_basis(qmdata_t *data) {
   int numread, numshells;
   shell_t *shell;
   long filepos;
+  int semiempirical = 0;
 
   if (!strcmp(data->gbasis, "MNDO") ||
       !strcmp(data->gbasis, "AM1")  ||
       !strcmp(data->gbasis, "PM3")) {
-    return TRUE;
+    semiempirical = 1;
   }
 
   /* Search for "ATOMIC BASIS SET" line */
-  if (pass_keyline(data->file, "BASIS SET IN INPUT FORMAT", NULL) != FOUND ) {
+  if (pass_keyline(data->file, "BASIS SET IN INPUT FORMAT", NULL) != FOUND and
+		  pass_keyline(data->file, "GAUSSIAN BASIS SET", NULL) != FOUND) {
     printf("orcaplugin) No basis set found!\n");
     return FALSE;
   }
@@ -442,7 +485,7 @@ int get_basis(qmdata_t *data) {
 
   prim_t *prim;
 
-  while (!finished) {
+  while (!finished && !semiempirical) {
     printf("Trying to read bf. \n");
     if (pass_keyline(data->file, "Basis set for element", NULL) == FOUND ) {
       GET_LINE(buffer, data->file);
@@ -510,6 +553,47 @@ int get_basis(qmdata_t *data) {
       finished = TRUE;
       printf("orcaplugin) Reading basis set finished! \n");
     }
+  }
+
+  finished = 0;
+  // semiempirical sto-3g
+  int ngauss = 3;
+  int atomCounter = 0;
+  int shellNumber;
+  while(!finished && semiempirical) {
+  	if(goto_keyline(data->file,"shells",NULL) == FOUND) {
+		thisline(data->file);
+		GET_LINE(buffer, data->file);
+		std::string lineString(buffer);
+		std::vector<std::string> elements = split(reduce(lineString), ' ');
+		shellNumber = stoi(elements[2]);
+		shell = (shell_t*) calloc(shellNumber, sizeof(shell_t));
+		data->basis_set[atomCounter].shell = shell;
+		data->basis_set[atomCounter].numshells = shellNumber;
+		for (size_t shellIdx = 0; shellIdx < shellNumber; ++shellIdx) {
+			GET_LINE(buffer, data->file);
+			prim = (prim_t*) calloc(3, sizeof(prim_t));
+			shell[shellIdx].prim = prim;
+			shell[shellIdx].numprims = 3;
+			for (size_t nbas = 0; nbas < ngauss; ++nbas) {
+				GET_LINE(buffer, data->file);
+				std::string l(buffer);
+				std::vector<std::string> coeff = split(reduce(l), ' ');
+				prim[nbas].exponent = stod(coeff[0]);
+				prim[nbas].contraction_coeff = stod(coeff[1]);	
+			}
+		}
+		data->num_shells += shellNumber;
+		data->num_basis_atoms++;
+		data->num_basis_funcs += 3;
+    		strncpy(data->basis_set[atomCounter].name, data->atoms[atomCounter].type, 11);
+		atomCounter++;
+	} else {
+		finished = TRUE;
+		prim = NULL;
+		std::cout << "orcaplugin) Reading STO-3G basis for semiempirical method finished." << std::endl;
+		return fill_basis_arrays(data);
+	}
   }
 
   // As we read GTOs from the Orca output file, we need to
