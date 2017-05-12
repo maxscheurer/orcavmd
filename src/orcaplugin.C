@@ -101,6 +101,10 @@ static void close_orca_read(void *mydata);
 // Function for reading timestep independent information: Main Parser
 static int parse_static_data(qmdata_t *, int *);
 
+
+// collect information about the jobtype
+static int get_job_info(qmdata_t *data);
+
 // analyze trajectory, getting number of frames, file positions etc.
 static int analyze_traj(qmdata_t *data, orcadata *orca);
 
@@ -232,7 +236,55 @@ static int read_orca_structure(void *mydata, int *optflags, molfile_atom_t *atom
   return MOLFILE_SUCCESS;
 }
 
+std::string trim(const std::string& str,
+                 const std::string& whitespace = " \t")
+{
+    const auto strBegin = str.find_first_not_of(whitespace);
+    if (strBegin == std::string::npos)
+        return ""; // no content
 
+    const auto strEnd = str.find_last_not_of(whitespace);
+    const auto strRange = strEnd - strBegin + 1;
+
+    return str.substr(strBegin, strRange);
+}
+
+
+static int get_job_info(qmdata_t *data) {
+	long filepos;
+	char buffer[BUFSIZ];
+	filepos = ftell(data->file);
+	if (goto_keyline(data->file, "INPUT FILE", NULL)) {
+		thisline(data->file);
+		eatline(data->file, 3);
+	}
+	std::vector<std::string> inputFile;
+	int endOfInput = 0;
+	while(!endOfInput) {
+		GET_LINE(buffer, data->file);
+		std::string test(buffer);
+		std::cout << test << std::endl;
+		auto ln = test.find_first_of("123456789");
+		auto beforeLine = test.find_first_of(">");
+		int lineNumber = stoi(test.substr(ln,beforeLine-ln));
+		std::string lContent = trim(test.substr(beforeLine+1));
+		inputFile.push_back(lContent);
+		if (lineNumber == 1) {
+			if (lContent[0] != '!') {
+				std::cout << "orcaplugin) File corrupted in"
+					" input section. Exiting" << std::endl;
+				return FALSE;
+			} else {
+				std::cout << "Found commands." << std::endl;
+			}
+		}
+		if (test.find("END OF INPUT") !=std::string::npos) {
+			endOfInput = 1;
+		}
+	}
+	
+	return FALSE;
+}
 
 static int have_orca(qmdata_t *data, orcadata* orca) {
   int programLine;
@@ -280,6 +332,7 @@ static int have_orca(qmdata_t *data, orcadata* orca) {
 
 static int parse_static_data(qmdata_t *data, int* natoms) {
   orcadata *orca = (orcadata *)data->format_specific_data;
+  if (!get_job_info(data)) return FALSE;
 
   if (!get_input_structure(data, orca)) return FALSE;
 
