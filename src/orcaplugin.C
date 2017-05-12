@@ -575,12 +575,13 @@ int get_basis(qmdata_t *data) {
 			prim = (prim_t*) calloc(3, sizeof(prim_t));
 			shell[shellIdx].prim = prim;
 			shell[shellIdx].numprims = 3;
+      shell[numshells].type = shellIdx;
 			for (size_t nbas = 0; nbas < ngauss; ++nbas) {
 				GET_LINE(buffer, data->file);
 				std::string l(buffer);
 				std::vector<std::string> coeff = split(reduce(l), ' ');
 				prim[nbas].exponent = stod(coeff[0]);
-				prim[nbas].contraction_coeff = stod(coeff[1]);	
+				prim[nbas].contraction_coeff = stod(coeff[1]);
 			}
 		}
 		data->num_shells += shellNumber;
