@@ -249,6 +249,7 @@ std::string trim(const std::string& str,
     return str.substr(strBegin, strRange);
 }
 
+std::vector<std::string> semiempiricals({"MNDO","PM3","AM1"});
 
 static int get_job_info(qmdata_t *data) {
 	long filepos;
@@ -277,6 +278,14 @@ static int get_job_info(qmdata_t *data) {
 			} else {
 				std::cout << "Found commands." << std::endl;
 			}
+			for (auto method : semiempiricals) {
+				if (lContent.find(method) != std::string::npos) {
+					const char *m = method.c_str();
+					strncpy(data->gbasis, m, sizeof(char)*strlen(m));
+					std::cout << "semiemp. used" << std::endl;
+					break;	
+				}
+			}		
 		}
 		if (test.find("END OF INPUT") !=std::string::npos) {
 			endOfInput = 1;
