@@ -562,39 +562,40 @@ int get_basis(qmdata_t *data) {
   int shellNumber;
   while(!finished && semiempirical) {
   	if(goto_keyline(data->file,"shells",NULL) == FOUND) {
-		thisline(data->file);
-		GET_LINE(buffer, data->file);
-		std::string lineString(buffer);
-		std::vector<std::string> elements = split(reduce(lineString), ' ');
-		shellNumber = stoi(elements[2]);
-		shell = (shell_t*) calloc(shellNumber, sizeof(shell_t));
-		data->basis_set[atomCounter].shell = shell;
-		data->basis_set[atomCounter].numshells = shellNumber;
-		for (size_t shellIdx = 0; shellIdx < shellNumber; ++shellIdx) {
-			GET_LINE(buffer, data->file);
-			prim = (prim_t*) calloc(3, sizeof(prim_t));
-			shell[shellIdx].prim = prim;
-			shell[shellIdx].numprims = 3;
-      shell[numshells].type = shellIdx;
-			for (size_t nbas = 0; nbas < ngauss; ++nbas) {
-				GET_LINE(buffer, data->file);
-				std::string l(buffer);
-				std::vector<std::string> coeff = split(reduce(l), ' ');
-				prim[nbas].exponent = stod(coeff[0]);
-				prim[nbas].contraction_coeff = stod(coeff[1]);
-			}
-		}
-		data->num_shells += shellNumber;
-		data->num_basis_atoms++;
-		data->num_basis_funcs += 3;
-    		strncpy(data->basis_set[atomCounter].name, data->atoms[atomCounter].type, 11);
-		atomCounter++;
-	} else {
-		finished = TRUE;
-		prim = NULL;
-		std::cout << "orcaplugin) Reading STO-3G basis for semiempirical method finished." << std::endl;
-		return fill_basis_arrays(data);
-	}
+  		thisline(data->file);
+  		GET_LINE(buffer, data->file);
+  		std::string lineString(buffer);
+  		std::vector<std::string> elements = split(reduce(lineString), ' ');
+  		shellNumber = stoi(elements[2]);
+  		shell = (shell_t*) calloc(shellNumber, sizeof(shell_t));
+  		data->basis_set[atomCounter].shell = shell;
+  		data->basis_set[atomCounter].numshells = shellNumber;
+  		for (size_t shellIdx = 0; shellIdx < shellNumber; ++shellIdx) {
+  			GET_LINE(buffer, data->file);
+  			prim = (prim_t*) calloc(3, sizeof(prim_t));
+  			shell[shellIdx].prim = prim;
+  			shell[shellIdx].numprims = 3;
+        shell[numshells].type = shellIdx;
+  			for (size_t nbas = 0; nbas < ngauss; ++nbas) {
+  				GET_LINE(buffer, data->file);
+  				std::string l(buffer);
+  				std::vector<std::string> coeff = split(reduce(l), ' ');
+  				prim[nbas].exponent = stod(coeff[0]);
+  				prim[nbas].contraction_coeff = stod(coeff[1]);
+  			}
+  		}
+  		data->num_shells += shellNumber;
+  		data->num_basis_atoms++;
+  		data->num_basis_funcs += 3;
+      strncpy(data->basis_set[atomCounter].name, data->atoms[atomCounter].type, 11);
+  		atomCounter++;
+	  } else {
+      finished = TRUE;
+      prim = NULL;
+      std::cout << "orcaplugin) Reading STO-3G basis for semiempirical method finished." << std::endl;
+      // We return here without further ado.
+      return fill_basis_arrays(data);
+    }
   }
 
   // As we read GTOs from the Orca output file, we need to
