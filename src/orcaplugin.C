@@ -339,6 +339,8 @@ static int get_job_info(qmdata_t *data) {
   if (lower.find("opt") != std::string::npos) {
     data->runtype = MOLFILE_RUNTYPE_OPTIMIZE;
     std::cout << "orcaplugin) Optimization loaded." << std::endl;
+  } else if (lower.find("engrad") != std::string::npos) {
+    data->runtype = MOLFILE_RUNTYPE_GRADIENT;
   }
 
 	return TRUE;
@@ -805,7 +807,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
 
   // reading geometries...
 
-  if (data->runtype == MOLFILE_RUNTYPE_OPTIMIZE) {
+  if (data->runtype == MOLFILE_RUNTYPE_OPTIMIZE || data->runtype == MOLFILE_RUNTYPE_GRADIENT && data->num_frames > 1) {
     if (goto_keyline(data->file, "CARTESIAN COORDINATES (ANGSTROEM)", NULL)) {
       GET_LINE(buffer, data->file);
       // thisline(data->file);
@@ -1641,6 +1643,47 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
     data->qm_timestep = (qm_timestep_t *)calloc(1, sizeof(qm_timestep_t));
     memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
 
+    return TRUE;
+  } else if (data->runtype == MOLFILE_RUNTYPE_GRADIENT) {
+    int appendedCalculations = 0;
+    goto_keyline(data->file, "Energy+Gradient Calculation", NULL);
+    data->filepos_array[0] = ftell(data->file);
+    data->num_frames = 1;
+
+    while(TRUE) {
+      if (!fgets(buffer, sizeof(buffer), data->file)) break;
+      line = trimleft(buffer);
+
+      std::string l(line);
+      if (l.find("Energy+Gradient Calculation") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_GRADIENT) {
+        appendedCalculations++;
+        std::cout << l << std::endl;
+        if (data->num_frames > 0) {
+          data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
+        }
+        data->filepos_array[data->num_frames] = ftell(data->file);
+        data->num_frames++;
+      }
+    }
+
+    if (appendedCalculations) {
+      std::cout << "orcaplugin) Found multiple appended gradient calculations: " << data->num_frames << std::endl;
+      pass_keyline(data->file, "FINAL SINGLE POINT ENERGY", NULL);
+      data->end_of_traj = ftell(data->file);
+      fseek(data->file, filepos, SEEK_SET);
+
+      data->qm_timestep = (qm_timestep_t *)calloc(data->num_frames,
+                                                  sizeof(qm_timestep_t));
+      memset(data->qm_timestep, 0, data->num_frames*sizeof(qm_timestep_t));
+    } else {
+      data->num_frames = 1;
+      pass_keyline(data->file, "FINAL SINGLE POINT ENERGY", NULL);
+      data->end_of_traj = ftell(data->file);
+
+      /* Allocate memory for the frame */
+      data->qm_timestep = (qm_timestep_t *)calloc(data->num_frames, sizeof(qm_timestep_t));
+      memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
+    }
     return TRUE;
   }
   else if (data->runtype == MOLFILE_RUNTYPE_OPTIMIZE) {
