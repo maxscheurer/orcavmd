@@ -503,7 +503,7 @@ int get_basis(qmdata_t *data) {
   }
 
   while (!finished && !semiempirical) {
-    printf("Trying to read bf. \n");
+    // printf("Trying to read bf. \n");
     if (pass_keyline(data->file, "Basis set for element", NULL) == FOUND ) {
       GET_LINE(buffer, data->file);
       numread = sscanf(buffer,"%s %s",&word[0][0], &word[1][0]);
@@ -649,12 +649,12 @@ int get_basis(qmdata_t *data) {
     currentElement = data->atoms[n].type;
     for (size_t j = 0; j < i; j++) {
       if (!strcmp(currentElement, tempBasis[j].name)) {
-        printf("orcaplugin) found basis for element %s\n", currentElement);
+        // printf("orcaplugin) found basis for element %s\n", currentElement);
         currentBasis = &tempBasis[j];
         tempBasisUsed[j] = 1;
       }
     }
-    printf("orcaplugin) Basis for element %s has %d shells.\n", currentElement, currentBasis->numshells);
+    // printf("orcaplugin) Basis for element %s has %d shells.\n", currentElement, currentBasis->numshells);
     data->basis_set[n].shell = (shell_t *) calloc(currentBasis->numshells, sizeof(shell_t));
     memcpy(data->basis_set[n].shell, currentBasis->shell, currentBasis->numshells * sizeof(shell_t));
     data->basis_set[n].numshells = currentBasis->numshells;
@@ -734,7 +734,7 @@ static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
 
     strncpy(atm->type, atname, sizeof(atm->type));
     atm->atomicnum = floor(atomicnum+0.5); /* nuclear charge */
-    printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
+    // printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
 
     /* if coordinates are in Bohr convert them to Angstrom */
     if (unit==BOHR) {
@@ -1669,7 +1669,7 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
       std::string l(line);
       if (l.find("Energy+Gradient Calculation") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_GRADIENT) {
         appendedCalculations++;
-        std::cout << l << std::endl;
+        // std::cout << l << std::endl;
         if (data->num_frames > 0) {
           data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
         }
