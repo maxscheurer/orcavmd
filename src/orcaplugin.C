@@ -496,13 +496,25 @@ int get_basis(qmdata_t *data) {
 
   prim_t *prim;
 
+  std::vector<std::string> readElements;
+  for (size_t atom = 0; atom < data->numatoms; atom++) {
+
+
+  }
+
   while (!finished && !semiempirical) {
     printf("Trying to read bf. \n");
     if (pass_keyline(data->file, "Basis set for element", NULL) == FOUND ) {
       GET_LINE(buffer, data->file);
       numread = sscanf(buffer,"%s %s",&word[0][0], &word[1][0]);
       strcpy(elementName, &word[1][0]);
-      // printf("New element found: %s\n", &word[1][0]);
+      printf("New element found: %s\n", &word[1][0]);
+      std::string atype(&word[1][0]);
+      if (std::find(readElements.begin(), readElements.end(), atype) != readElements.end()) {
+        break;
+      } else {
+        readElements.push_back(atype);
+      }
       int elementCompleted = 0;
 
 
@@ -1009,8 +1021,8 @@ static CoeffRowBlock convertPure(CoeffRowBlock pureBlock) {
   } else {
     return resultBlock;
   }
-  m->printMatrix();
-  multiplication->printMatrix();
+  // m->printMatrix();
+  // multiplication->printMatrix();
   resultBlock = multiplication->toVector();
   delete multiplication;
   delete m;
@@ -1284,10 +1296,10 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
             pureFunctionName.clear();
             if (orbital.compare(0, 1, "d") == 0) {
               expectedNumberOfPureFunctions = 5;
-              std::cout << "Trying to read d-functions." << std::endl;
+              // std::cout << "Trying to read d-functions." << std::endl;
             } else if (orbital.compare(0, 1, "f") == 0) {
               expectedNumberOfPureFunctions = 7;
-              std::cout << "Trying to read f-functions." << std::endl;
+              // std::cout << "Trying to read f-functions." << std::endl;
             }
             readingPureFunction = 1;
             pureFunction.push_back(moRow);
@@ -1296,15 +1308,15 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
             pureFunction.push_back(moRow);
             pureFunctionName.push_back(orbital);
             if (pureFunction.size() == expectedNumberOfPureFunctions) {
-              std::cout << "found complete pure function set." << std::endl;
+              // std::cout << "found complete pure function set." << std::endl;
               CoeffRowBlock newBlock = convertPure(pureFunction);
               blockNumberOfContracted+= newBlock.size();
               for (auto r : newBlock) {
                 newRows.push_back(r);
                 for (auto c : r) {
-                  std::cout << c << " ";
+                  // std::cout << c << " ";
                 }
-                std::cout << std::endl;
+                // std::cout << std::endl;
               }
               if (!blockIdx) {
                 for (size_t i = 0; i < newBlock.size(); i++) {
