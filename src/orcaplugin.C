@@ -404,7 +404,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  print_input_data(data);
+  // print_input_data(data);
 
   return TRUE;
 }
@@ -500,7 +500,7 @@ int get_basis(qmdata_t *data) {
       GET_LINE(buffer, data->file);
       numread = sscanf(buffer,"%s %s",&word[0][0], &word[1][0]);
       strcpy(elementName, &word[1][0]);
-      printf("New element found: %s\n", &word[1][0]);
+      // printf("New element found: %s\n", &word[1][0]);
       int elementCompleted = 0;
 
 
@@ -515,18 +515,18 @@ int get_basis(qmdata_t *data) {
       while(!elementCompleted) {
         GET_LINE(buffer, data->file);
         numread = sscanf(buffer,"%s %s %s",&word[0][0], &word[1][0],&word[2][0]);
-        printf("numread: %d -- %s %s %s \n",numread, &word[0][0], &word[1][0],&word[2][0]);
+        // printf("numread: %d -- %s %s %s \n",numread, &word[0][0], &word[1][0],&word[2][0]);
         switch (numread) {
           case 1:
             if (strcmp(trimleft(trimright(&word[0][0])), "end")) {
-              printf("Section ended. \n");
+              // printf("Section ended. \n");
               elementCompleted = 1;
               break;
             }
           case 2:
             shell[numshells].numprims = atoi(trimleft(trimright(&word[1][0])));
             shell[numshells].type = shelltype_int(word[0][0]);
-            printf("orcaplugin) Type: %d NPrims: %d\n", shell[numshells].type, shell[numshells].numprims);
+            // printf("orcaplugin) Type: %d NPrims: %d\n", shell[numshells].type, shell[numshells].numprims);
             primcounter = 0;
             prim = (prim_t*)calloc(shell[numshells].numprims, sizeof(prim_t));
             // printf("!! Address of prim is %p\n", (void *)prim);
@@ -539,7 +539,7 @@ int get_basis(qmdata_t *data) {
           case 3:
             prim[primcounter].exponent = atof(&word[1][0]);
             prim[primcounter].contraction_coeff = atof(&word[2][0]);
-            printf("%f - %f\n", prim[primcounter].exponent, prim[primcounter].contraction_coeff);
+            // printf("%f - %f\n", prim[primcounter].exponent, prim[primcounter].contraction_coeff);
             primcounter++;
             break;
           default:
@@ -570,12 +570,13 @@ int get_basis(qmdata_t *data) {
   int atomCounter = 0;
   int shellNumber;
   while(!finished && semiempirical) {
-  	if(goto_keyline(data->file,"shells",NULL) == FOUND) {
-  		thisline(data->file);
+  	if(goto_keyline(data->file,"shells",NULL) == FOUND && atomCounter <(data->numatoms-1)) {
+  		// thisline(data->file);
   		GET_LINE(buffer, data->file);
   		std::string lineString(buffer);
   		std::vector<std::string> elements = split(reduce(lineString), ' ');
   		shellNumber = stoi(elements[2]);
+      // std::cout << "shell number: " << shellNumber << std::endl;
   		shell = (shell_t*) calloc(shellNumber, sizeof(shell_t));
   		data->basis_set[atomCounter].shell = shell;
   		data->basis_set[atomCounter].numshells = shellNumber;
@@ -584,7 +585,7 @@ int get_basis(qmdata_t *data) {
   			prim = (prim_t*) calloc(3, sizeof(prim_t));
   			shell[shellIdx].prim = prim;
   			shell[shellIdx].numprims = 3;
-        shell[numshells].type = shellIdx;
+        shell[shellIdx].type = shellIdx;
   			for (size_t nbas = 0; nbas < ngauss; ++nbas) {
   				GET_LINE(buffer, data->file);
   				std::string l(buffer);
@@ -609,19 +610,20 @@ int get_basis(qmdata_t *data) {
 
   // As we read GTOs from the Orca output file, we need to
   // loop over all atoms and assign the basis functions
-  printf("orcaplugin) Parsed basis set of %d elements. \n", i);
-  for (size_t j = 0; j < i; j++) {
-    printf("Element: %s\n", tempBasis[j].name);
-    printf("- NShells: %d\n", tempBasis[j].numshells);
-    for (size_t k = 0; k < tempBasis[j].numshells; k++) {
-      printf("--- NPrims: %d \n", tempBasis[j].shell[k].numprims);
-      for (size_t o = 0; o < tempBasis[j].shell[k].numprims; o++) {
-        float expo = tempBasis[j].shell[k].prim[o].exponent;
-        float cont = tempBasis[j].shell[k].prim[o].contraction_coeff;
-        printf("----- E= %f , C= %f \n", expo, cont);
-      }
-    }
-  }
+
+  // printf("orcaplugin) Parsed basis set of %d elements. \n", i);
+  // for (size_t j = 0; j < i; j++) {
+  //   printf("Element: %s\n", tempBasis[j].name);
+  //   printf("- NShells: %d\n", tempBasis[j].numshells);
+  //   for (size_t k = 0; k < tempBasis[j].numshells; k++) {
+  //     printf("--- NPrims: %d \n", tempBasis[j].shell[k].numprims);
+  //     for (size_t o = 0; o < tempBasis[j].shell[k].numprims; o++) {
+  //       float expo = tempBasis[j].shell[k].prim[o].exponent;
+  //       float cont = tempBasis[j].shell[k].prim[o].contraction_coeff;
+  //       printf("----- E= %f , C= %f \n", expo, cont);
+  //     }
+  //   }
+  // }
 
   // Allocate an array of zeros to store whether the tempBasis
   // of the same index was actually used.
@@ -718,7 +720,7 @@ static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
 
     strncpy(atm->type, atname, sizeof(atm->type));
     atm->atomicnum = floor(atomicnum+0.5); /* nuclear charge */
-    // printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
+    printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
 
     /* if coordinates are in Bohr convert them to Angstrom */
     if (unit==BOHR) {
@@ -803,6 +805,23 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
 
   // reading geometries...
 
+  if (data->runtype == MOLFILE_RUNTYPE_OPTIMIZE) {
+    if (goto_keyline(data->file, "CARTESIAN COORDINATES (ANGSTROEM)", NULL)) {
+      GET_LINE(buffer, data->file);
+      // thisline(data->file);
+      // UNITS ARE ANGSTROEM
+      // bohr = 0;
+      // sscanf()
+    } else {
+      printf("orcaplugin) No cartesian coordinates in ANGSTROEM found.\n");
+    }
+    // skip the ---- line
+    eatline(data->file, 1);
+    if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
+      printf("orcaplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
+    }
+  }
+
   /* Try reading canonical alpha/beta wavefunction */
   check_add_wavefunctions(data, cur_ts);
 
@@ -837,6 +856,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
     if (data->status == MOLFILE_QMSTATUS_OPT_CONV ||
         data->status == MOLFILE_QMSTATUS_OPT_NOT_CONV) {
       fseek(data->file, data->end_of_traj, SEEK_SET);
+      std::cout << "orcaplugin) Finished trajectory." << std::endl;
     }
 
     /* Try to read final wavefunction and orbital energies
@@ -848,6 +868,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   }
 
   data->num_frames_read++;
+  std::cout << "orcaplugin) Frames read: " << data->num_frames_read << std::endl;
 
   return TRUE;
 }
@@ -1183,7 +1204,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
           if (found!=std::string::npos) {
             std::string orbital =  bfn.substr(found);
             orbitalNames.push_back(orbital);
-            std::cout << orbital << std::endl;
+            // std::cout << orbital << std::endl;
           } else {
             printf("orcaplugin) Could not determine orbital description.\n");
             return FALSE;
@@ -1208,7 +1229,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   if ( std::adjacent_find( numberContractedBf.begin(), numberContractedBf.end(), std::not_equal_to<int>() ) != numberContractedBf.end() ) {
     printf("orcaplugin) Molecular orbital section corrupted. Did not read consistent number of contracted basis functions!\n");
     for (auto con : numberContractedBf) {
-      std::cout << con << std::endl;
+      // std::cout << con << std::endl;
     }
     return FALSE;
   }
@@ -1254,7 +1275,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
             break;
         }
         // d-shell found
-        std::cout << "orbital index: " << orbIndex-orbList.begin() << " " << orbital << std::endl;
+        // std::cout << "orbital index: " << orbIndex-orbList.begin() << " " << orbital << std::endl;
         if (listIndex > 3) {
           if (!readingPureFunction) {
             pureFunction.clear();
@@ -1351,7 +1372,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   int moBlockIdx = 0;
   for (auto moBlock : newAllCoefficients) {
     for (auto moRow : moBlock) {
-      std::cout << rowIndex << std::endl;
+      // std::cout << rowIndex << std::endl;
       for (auto moCo : moRow) {
         if ((columnIndex * data->wavef_size + rowIndex) > num_orbitals * data->wavef_size) {
           std::cout << "something went wrong:" << columnIndex << std::endl;
@@ -1376,15 +1397,15 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   float coeff2 = 0;
   for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
     if (t % data->wavef_size == 0) {
-      std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
+      // std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
       coeff2 = 0;
     }
     coeff2 += wf->wave_coeffs[t]*wf->wave_coeffs[t];
-    std::cout << wf->wave_coeffs[t] << std::endl;
+    // std::cout << wf->wave_coeffs[t] << std::endl;
   }
   data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
 
-  std::cout << "wfang: " << wfAngMoment.size() <<  " " << 3*data->wavef_size <<std::endl;
+  // std::cout << "wfang: " << wfAngMoment.size() <<  " " << 3*data->wavef_size <<std::endl;
   for (size_t ang = 0; ang < wfAngMoment.size(); ang++) {
     data->angular_momentum[ang] = wfAngMoment[ang];
   }
@@ -1621,69 +1642,46 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
     memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
 
     return TRUE;
-  } else {
+  }
+  else if (data->runtype == MOLFILE_RUNTYPE_OPTIMIZE) {
+    std::cout << "orcaplugin) Reading trajectory of optimization." << std::endl;
+    rewind(data->file);
+    goto_keyline(data->file, "Geometry Optimization Run", NULL);
+  }
+  else {
     std::cout << "orcaplugin) Jobtype not supported for trajectory reading." << std::endl;
     return FALSE;
   }
 
-  printf("orcaplugin) Analyzing trajectory...\n");
+  // printf("orcaplugin) Analyzing trajectory...\n");
   data->status = MOLFILE_QMSTATUS_UNKNOWN;
 
-  while (0) {
+  while (TRUE) {
     if (!fgets(buffer, sizeof(buffer), data->file)) break;
     line = trimleft(buffer);
 
-    if (strstr(line, nserch) ||
-        strstr(line, "---- SURFACE MAPPING GEOMETRY") ||
-        strstr(line, "MINIMUM ENERGY CROSSING POINT SEARCH") ||
-        (data->runtype==MOLFILE_RUNTYPE_MEX && strstr(line, "NSERCH=")==line)) {
-      printf("orcaplugin) %s", line);
-
+    std::string l(line);
+    if (l.find("GEOMETRY OPTIMIZATION CYCLE") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_OPTIMIZE) {
+      // std::cout << l << std::endl;
       if (data->num_frames > 0) {
-        data->filepos_array = (long*)realloc(data->filepos_array,
-                                (data->num_frames+1)*sizeof(long));
+        data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
       }
       data->filepos_array[data->num_frames] = ftell(data->file);
-      if (data->runtype==MOLFILE_RUNTYPE_SURFACE) {
-        int ret = goto_keyline(data->file,
-                               "ATOM      ATOMIC", "HAS ENERGY VALUE",
-                               "---- SURFACE MAPPING GEOMETRY ----", NULL);
-        if (ret>0 && ret<3 &&
-            (have_keyline(data->file, "...... END OF ONE-ELECTRON INTEGRALS ......",
-                          "---- SURFACE MAPPING GEOMETRY ----") ||
-             have_keyline(data->file, "... DONE WITH POTENTIAL SURFACE SCAN",
-                          "---- SURFACE MAPPING GEOMETRY ----"))) {
-          data->num_frames++;
-        }
-      }
-      else if (pass_keyline(data->file, "COORDINATES OF",
-                            "BEGINNING GEOMETRY SEARCH POINT NSERCH=")==FOUND)
-      {
-        /* Make sure that we have at least a complete coordinate
-           block in order to consider this a new frame. */
-        if (have_keyline(data->file, "INTERNUCLEAR DISTANCES",
-                         "1 ELECTRON INTEGRALS") ||
-            have_keyline(data->file, "1 ELECTRON INTEGRALS",
-                         "BEGINNING GEOMETRY SEARCH POINT NSERCH=")) {
-          data->num_frames++;
-        }
-      }
+      data->num_frames++;
     }
-    else if (strstr(line, "***** EQUILIBRIUM GEOMETRY LOCATED") ||
-             strstr(line, "... DONE WITH POTENTIAL SURFACE SCAN")) {
-      printf("orcaplugin) ==== End of trajectory (%d frames) ====\n",
-             data->num_frames);
+    else if (l.find("THE OPTIMIZATION HAS CONVERGED") != std::string::npos) {
+      printf("orcaplugin) ==== End of trajectory (%d frames) ====\n", data->num_frames);
       data->status = MOLFILE_QMSTATUS_OPT_CONV;
-      break;
     }
-    else if (strstr(line, "***** FAILURE TO LOCATE STATIONARY POINT,")) {
-      printf("orcaplugin) %s\n", line);
-      if (strstr(strchr(line, ','), "SCF HAS NOT CONVERGED")) {
-        data->status = MOLFILE_QMSTATUS_SCF_NOT_CONV;
-        break;
-      }
-      else if (strstr(strchr(line, ','), "TOO MANY STEPS TAKEN")) {
-        data->status = MOLFILE_QMSTATUS_OPT_NOT_CONV;
+    else if (data->status == MOLFILE_QMSTATUS_OPT_CONV) {
+      if(l.find("FINAL ENERGY EVALUATION AT THE STATIONARY POINT") != std::string::npos) {
+        if (data->num_frames > 0) {
+          data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
+        }
+        std::cout << "orcaplugin) found equilibrium geometry." << std::endl;
+        data->filepos_array[data->num_frames] = ftell(data->file);
+        data->num_frames++;
+        goto_keyline(data->file, "TOTAL RUN TIME", NULL);
         break;
       }
     }
@@ -1796,7 +1794,7 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.type = MOLFILE_PLUGIN_TYPE;
   plugin.name = "orca";
   plugin.prettyname = "Orca";
-  plugin.author = "Maximilian Scheurer, Marcelo Melo";
+  plugin.author = "Maximilian Scheurer, Michael F. Herbst, Marcelo Melo";
   plugin.majorv = 0;
   plugin.minorv = 0;
   plugin.is_reentrant = VMDPLUGIN_THREADUNSAFE;
@@ -1917,6 +1915,7 @@ static int read_timestep(void *mydata, int natoms,
   //
   /* store the wave function and orbital energies */
   if (cur_ts->wave) {
+    std::cout << "Have wavefunctions: " << cur_ts->numwave << " in frame: " << data->num_frames_sent << std::endl;
     for (i=0; i<cur_ts->numwave; i++) {
       qm_wavefunction_t *wave = &cur_ts->wave[i];
       qm_ts->wave[i].type         = wave->type;
@@ -1940,11 +1939,11 @@ static int read_timestep(void *mydata, int natoms,
     }
   }
   //
-  // if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
-  //     data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+  if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
+      data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
     /* We have only a single point */
     data->trajectory_done = TRUE;
-  // }
+  }
 
   data->num_frames_sent++;
 
