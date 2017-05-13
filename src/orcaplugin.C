@@ -2158,8 +2158,8 @@ static int read_orca_rundata(void *mydata,
     for (i=0; i<3*data->wavef_size; i++) {
       basis_data->angular_momentum[i] = data->angular_momentum[i];
     }
-    std::cout << "free data->angular_momentum" << std::endl;
-    free(data->angular_momentum);
+    // std::cout << "free data->angular_momentum" << std::endl;
+    // free(data->angular_momentum);
   }
 #endif
 
