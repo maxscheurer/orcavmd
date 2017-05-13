@@ -143,21 +143,54 @@ int main(int argc, char *argv[]) {
     timestep.velocities = NULL;
     int nsteps = 0;
     timestep.coords = (float *)malloc(3*natoms*sizeof(float));
-    molfile_qm_metadata_t* meta = (molfile_qm_metadata_t*) malloc(sizeof(molfile_qm_metadata_t));
-    molfile_qm_timestep_t* tstp = (molfile_qm_timestep_t*) malloc(sizeof(molfile_qm_timestep_t));
-    tstp->wave = (molfile_qm_wavefunction_t*) calloc(1, sizeof(molfile_qm_wavefunction_t));
-    // tstp->wave =
-    while (!(rc = cplugin->read_timestep(chandle, natoms, &timestep, meta, tstp))) {
+    while (1) {
+      molfile_qm_metadata_t *qm_metadata = NULL; // this just a dummy
+      molfile_qm_timestep_t qm_timestep;
+      molfile_qm_timestep_metadata_t qmmeta;
+      memset(&qmmeta, 0, sizeof(molfile_qm_timestep_metadata_t));
+      // XXX need to add timestep parameter or other method to specify
+      //     which frame this applies to, else keep it the way it is
+      //     and rename the plugin function appropriately.
+      cplugin->read_qm_timestep_metadata(chandle, &qmmeta);
+      memset(&qm_timestep, 0, sizeof(molfile_qm_timestep_t));
+      qm_timestep.wave = new molfile_qm_wavefunction_t[qmmeta.num_wavef];
+      printf("%d\n", qmmeta.num_wavef);
+      memset(qm_timestep.wave, 0, qmmeta.num_wavef*sizeof(molfile_qm_wavefunction_t));
+      // printf("%p\n", qm_timestep.wave[0].wave_coeffs);
+      int i;
+      for (i=0; (i<MOLFILE_MAXWAVEPERTS && i<qmmeta.num_wavef); i++) {
+        qm_timestep.wave[i].wave_coeffs =
+          new float[qmmeta.num_orbitals_per_wavef[i]*qmmeta.wavef_size];
+        if (qmmeta.has_orben_per_wavef[i]) {
+          qm_timestep.wave[i].orbital_energies =
+            new float[qmmeta.num_orbitals_per_wavef[i]];
+        }
+        if (qmmeta.has_occup_per_wavef[i]) {
+          qm_timestep.wave[i].occupancies =
+            new float[qmmeta.num_orbitals_per_wavef[i]];
+        }
+      }
+      rc = cplugin->read_timestep(chandle, natoms, &timestep, qm_metadata, &qm_timestep);
+      if (rc != MOLFILE_SUCCESS) {
+        break;
+      }
       nsteps++;
-    // free(timestep.coords);
-      // for (int i=0; i<natoms; i++) {
-      //   printf("step %d -- x: %f y: %f z: %f\n", nsteps, timestep.coords[3*i  ], timestep.coords[3*i+1], timestep.coords[3*i+2]);
-      // }
+
+      delete [] qm_timestep.scfenergies;
+      if (qm_timestep.gradient) delete [] qm_timestep.gradient;
+      if (qm_timestep.charges)  delete [] qm_timestep.charges;
+      if (qm_timestep.charge_types) delete [] qm_timestep.charge_types;
+
+      for (i=0; i<qmmeta.num_wavef; i++) {
+        delete [] qm_timestep.wave[i].wave_coeffs;
+        delete [] qm_timestep.wave[i].orbital_energies;
+        delete [] qm_timestep.wave[i].occupancies;
+      }
+      delete [] qm_timestep.wave;
     }
+
     free(timestep.coords);
-    free(meta);
-    free(tstp);
-    timestep.coords = NULL;
+
     if (rc != MOLFILE_SUCCESS) {
       fprintf(stderr, "FAILED: read_next_timestep returned %d\n", rc);
     } else {

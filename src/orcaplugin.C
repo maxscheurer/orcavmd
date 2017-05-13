@@ -617,6 +617,8 @@ int get_basis(qmdata_t *data) {
       finished = TRUE;
       prim = NULL;
       std::cout << "orcaplugin) Reading STO-3G basis for semiempirical method finished." << std::endl;
+      // free unused stuff
+      free(tempBasis);
       // We return here without further ado.
       return fill_basis_arrays(data);
     }
@@ -1344,7 +1346,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
           }
         }
       } else {
-        std::cout << "orcaplugin) ERROR. Only s/p/d-shells are supported." << std::endl;
+        std::cout << "orcaplugin) ERROR. Only s/p/d/f-shells are supported." << std::endl;
         return FALSE;
       }
 
@@ -1417,7 +1419,10 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     coeff2 += wf->wave_coeffs[t]*wf->wave_coeffs[t];
     // std::cout << wf->wave_coeffs[t] << std::endl;
   }
-  data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
+
+  if (data->num_frames_read < 1) {
+    data->angular_momentum = (int*)calloc(wfAngMoment.size(), sizeof(int));
+  }
 
   // std::cout << "wfang: " << wfAngMoment.size() <<  " " << 3*data->wavef_size <<std::endl;
   for (size_t ang = 0; ang < wfAngMoment.size(); ang++) {
@@ -1819,7 +1824,7 @@ static int read_qm_timestep_metadata(void *mydata,
     if (cur_ts->gradient) meta->has_gradient = TRUE;
 
   } else {
-    // std::cout << "not have frame" << std::endl;
+    std::cout << "not have frame" << std::endl;
     meta->has_gradient = FALSE;
     meta->num_scfiter  = 0;
     meta->num_orbitals_per_wavef[0] = 0;
@@ -2153,6 +2158,8 @@ static int read_orca_rundata(void *mydata,
     for (i=0; i<3*data->wavef_size; i++) {
       basis_data->angular_momentum[i] = data->angular_momentum[i];
     }
+    std::cout << "free data->angular_momentum" << std::endl;
+    free(data->angular_momentum);
   }
 #endif
 
@@ -2197,6 +2204,7 @@ static void close_orca_read(void *mydata) {
   free(data->normal_modes);
   free(data->imag_modes);
   free(data->angular_momentum);
+  data->angular_momentum = NULL;
   free(data->filepos_array);
 
   if (data->basis_set) {
