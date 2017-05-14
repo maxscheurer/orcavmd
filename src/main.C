@@ -154,7 +154,7 @@ int main(int argc, char *argv[]) {
       cplugin->read_qm_timestep_metadata(chandle, &qmmeta);
       memset(&qm_timestep, 0, sizeof(molfile_qm_timestep_t));
       qm_timestep.wave = new molfile_qm_wavefunction_t[qmmeta.num_wavef];
-      printf("%d\n", qmmeta.num_wavef);
+      // printf("%d\n", qmmeta.num_wavef);
       memset(qm_timestep.wave, 0, qmmeta.num_wavef*sizeof(molfile_qm_wavefunction_t));
       // printf("%p\n", qm_timestep.wave[0].wave_coeffs);
       int i;

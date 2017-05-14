@@ -323,7 +323,7 @@ static int get_job_info(qmdata_t *data) {
 					const char *m = method.c_str();
 					strncpy(data->gbasis, m, sizeof(char)*strlen(m));
 					strncpy(data->basis_string, "STO-3G", sizeof(char)*strlen("STO-3G"));
-					std::cout << "semiemp. used" << std::endl;
+					std::cout << "orcaplugin) semiempirical Method used." << std::endl;
 					break;
 				}
 			}
@@ -805,7 +805,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   cur_ts = data->qm_timestep + data->num_frames_read;
 
   // debugging the trajectory reading file positions
-  printf("nfread: %d \n", data->num_frames_read);
+  // printf("nfread: %d \n", data->num_frames_read);
   if (!data->filepos_array) {
     printf("filepos array empty!!!\n");
     return FALSE;
@@ -1675,7 +1675,7 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
       std::string l(line);
       if (l.find("Energy+Gradient Calculation") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_GRADIENT) {
         appendedCalculations++;
-        std::cout << l << std::endl;
+        // std::cout << l << std::endl;
         if (data->num_frames > 0) {
           data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
         }
@@ -1814,8 +1814,8 @@ static int read_qm_timestep_metadata(void *mydata,
       meta->num_orbitals_per_wavef[i] = cur_ts->wave[i].num_orbitals;
       meta->has_occup_per_wavef[i]    = cur_ts->wave[i].has_occup;
       meta->has_orben_per_wavef[i]    = cur_ts->wave[i].has_orben;
-      std::cout << "occ: " << cur_ts->wave[i].has_occup << std::endl;
-      std::cout << "energy: " << cur_ts->wave[i].has_orben << std::endl;
+      // std::cout << "occ: " << cur_ts->wave[i].has_occup << std::endl;
+      // std::cout << "energy: " << cur_ts->wave[i].has_orben << std::endl;
     }
     meta->wavef_size      = data->wavef_size;
     meta->num_wavef       = cur_ts->numwave;
@@ -1825,7 +1825,7 @@ static int read_qm_timestep_metadata(void *mydata,
     if (cur_ts->gradient) meta->has_gradient = TRUE;
 
   } else {
-    std::cout << "not have frame" << std::endl;
+    // std::cout << "not have frame" << std::endl;
     meta->has_gradient = FALSE;
     meta->num_scfiter  = 0;
     meta->num_orbitals_per_wavef[0] = 0;
@@ -1976,7 +1976,7 @@ static int read_timestep(void *mydata, int natoms,
   //
   /* store the wave function and orbital energies */
   if (cur_ts->wave) {
-    std::cout << "Have wavefunctions: " << cur_ts->numwave << " in frame: " << data->num_frames_sent << std::endl;
+    std::cout << "orcaplugin) Have wavefunctions: " << cur_ts->numwave << " in frame: " << data->num_frames_sent << std::endl;
     for (i=0; i<cur_ts->numwave; i++) {
       qm_wavefunction_t *wave = &cur_ts->wave[i];
       qm_ts->wave[i].type         = wave->type;
