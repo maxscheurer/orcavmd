@@ -1663,7 +1663,8 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
     return TRUE;
   } else if (data->runtype == MOLFILE_RUNTYPE_GRADIENT) {
     int appendedCalculations = 0;
-    goto_keyline(data->file, "Energy+Gradient Calculation", NULL);
+    rewind(data->file);
+    pass_keyline(data->file, "Energy+Gradient Calculation", NULL);
     data->filepos_array[0] = ftell(data->file);
     data->num_frames = 1;
 
@@ -1674,7 +1675,7 @@ static int analyze_traj(qmdata_t *data, orcadata *orca) {
       std::string l(line);
       if (l.find("Energy+Gradient Calculation") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_GRADIENT) {
         appendedCalculations++;
-        // std::cout << l << std::endl;
+        std::cout << l << std::endl;
         if (data->num_frames > 0) {
           data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
         }
