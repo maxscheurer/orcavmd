@@ -1122,6 +1122,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   int numReadEnergies = 0;
   int numReadOccupancies = 0;
   int numReadCoefficients = 0;
+  float numberOfElectrons = 0;
+  float occupiedOrbitals = 0;
   std::vector<int> numberContractedBf;
   std::vector<int> wfAngMoment;
   std::vector<std::string> orbitalNames;
@@ -1184,6 +1186,10 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
       for (size_t c = 0; c < numReadOccupancies; c++) {
         orbitalOccupancies.push_back((int)occ[c]);
         // std::cout << "Occupancy: " << occ[c] << std::endl;
+	numberOfElectrons += occ[c];
+	if (occ[c]) {
+	  occupiedOrbitals++;
+	}
       }
       num_orbitals += numReadOccupancies;
     }
@@ -1370,6 +1376,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   wf->wave_coeffs = (float *) calloc(num_orbitals * data->wavef_size, sizeof(float));
   wf->has_occup = TRUE;
   wf->has_orben = TRUE;
+  std::cout << "orcaplugin) Number of electrons: " << numberOfElectrons<< std::endl;
+  std::cout << "orcaplugin) Number of occupied orbitals: " << occupiedOrbitals << std::endl;
 
   int cnt = 0;
   for (auto en : orbitalEnergies) {
@@ -1432,9 +1440,9 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   // TODO: REMOVE!!!
   // hardcoded for TEST!!!
   data->multiplicity = 1;
-  data->num_occupied_A = 5;
-  data->num_occupied_B = 5;
-  data->num_electrons = 10;
+  data->num_occupied_A = occupiedOrbitals;
+  data->num_occupied_B = occupiedOrbitals;
+  data->num_electrons = numberOfElectrons;
   data->totalcharge = 0;
 
   std::cout << "----------------------------------------" << std::endl;
