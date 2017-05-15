@@ -1194,14 +1194,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
       num_orbitals += numReadOccupancies;
     }
 
-    // determine number of contracted basis functions
-    // this should be placed elsewhere...
-    // for (size_t atom = 0; atom < data->num_basis_atoms; atom++) {
-    //   for (size_t shellCount = 0; shellCount < data->basis_set[atom].numshells; shellCount++) {
-    //     data->wavef_size += 2*data->basis_set[atom].shell[shellCount].type + 1;
-    //   }
-    // }
-
     // skip --- line
     eatline(data->file, 1);
 
@@ -1221,8 +1213,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         if (firstRead == 2 && !haveAngMom) {
           std::string bfn = dumpBasisFunc;
           std::size_t found = bfn.find_first_not_of("-0123456789 ");
-          // TODO: make a better version when higher Ls are supported
-          // working version, very much not sophisticated!
           if (found!=std::string::npos) {
             std::string orbital =  bfn.substr(found);
             orbitalNames.push_back(orbital);
@@ -1250,9 +1240,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
 
   if ( std::adjacent_find( numberContractedBf.begin(), numberContractedBf.end(), std::not_equal_to<int>() ) != numberContractedBf.end() ) {
     printf("orcaplugin) Molecular orbital section corrupted. Did not read consistent number of contracted basis functions!\n");
-    for (auto con : numberContractedBf) {
-      // std::cout << con << std::endl;
-    }
     return FALSE;
   }
 
@@ -1321,10 +1308,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
               blockNumberOfContracted+= newBlock.size();
               for (auto r : newBlock) {
                 newRows.push_back(r);
-                for (auto c : r) {
-                  // std::cout << c << " ";
-                }
-                // std::cout << std::endl;
               }
               if (!blockIdx) {
                 for (size_t i = 0; i < newBlock.size(); i++) {
@@ -1356,9 +1339,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         return FALSE;
       }
 
-      // for (auto moCo : moRow) {
-      //
-      // }
       orbRowIndex++;
     }
     numberContractedBf.push_back(blockNumberOfContracted);
@@ -1376,8 +1356,6 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   wf->wave_coeffs = (float *) calloc(num_orbitals * data->wavef_size, sizeof(float));
   wf->has_occup = TRUE;
   wf->has_orben = TRUE;
-  std::cout << "orcaplugin) Number of electrons: " << numberOfElectrons<< std::endl;
-  std::cout << "orcaplugin) Number of occupied orbitals: " << occupiedOrbitals << std::endl;
 
   int cnt = 0;
   for (auto en : orbitalEnergies) {
@@ -1418,15 +1396,18 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     // std::cout << "bs: " << moBlockSize << std::endl;
   }
 
+  // LOGGING for MO coefficients
+  /*
   float coeff2 = 0;
   for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
     if (t % data->wavef_size == 0) {
-      // std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
+      std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
       coeff2 = 0;
     }
     coeff2 += wf->wave_coeffs[t]*wf->wave_coeffs[t];
-    // std::cout << wf->wave_coeffs[t] << std::endl;
+    std::cout << wf->wave_coeffs[t] << std::endl;
   }
+  */
 
   if (data->num_frames_read < 1) {
     data->angular_momentum = (int*)calloc(wfAngMoment.size(), sizeof(int));
@@ -1446,7 +1427,9 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   data->totalcharge = 0;
 
   std::cout << "----------------------------------------" << std::endl;
-  std::cout << "Number of orbitals: " << num_orbitals << std::endl;
+  std::cout << "Total number of orbitals: " << num_orbitals << std::endl;
+  std::cout << "Number of electrons: " << numberOfElectrons<< std::endl;
+  std::cout << "Number of occupied orbitals: " << occupiedOrbitals << std::endl;
   std::cout << "Number of contracted bf: " << numberContractedBf[0] << std::endl;
   std::cout << "----------------------------------------" << std::endl;
 
