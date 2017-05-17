@@ -147,6 +147,13 @@ static int read_timestep(void *mydata, int natoms,
 static int read_timestep_metadata(void *mydata, molfile_timestep_metadata_t *meta);
 
 static void print_input_data(qmdata_t *data);
+
+/*
+String manipulation
+*/
+template<typename Out>
+void split(const std::string &s, char delim, Out result);
+
 /*************************************************************
  *
  * MAIN ORCA CODE PART
@@ -342,6 +349,47 @@ static int get_job_info(qmdata_t *data) {
   } else if (lower.find("engrad") != std::string::npos) {
     data->runtype = MOLFILE_RUNTYPE_GRADIENT;
   }
+
+  int totalCharge;
+  if (goto_keyline(data->file, "Total Charge", NULL)) {
+    GET_LINE(buffer,data->file);
+		std::string chargeLine(buffer);
+    std::vector<std::string> chargeVec = split(reduce(chargeLine), ' ');
+    totalCharge = stoi(*(chargeVec.end()-1));
+    std::cout << "orcaplugin) Found molecule charge: " << totalCharge << std::endl;
+    data->totalcharge = totalCharge;
+  } else {
+    std::cout << "orcaplugin) No molecule charge found. Exiting" << std::endl;
+    return FALSE;
+  }
+
+  int multiplicity;
+  if (goto_keyline(data->file, "Multiplicity", NULL)) {
+    GET_LINE(buffer,data->file);
+		std::string multLine(buffer);
+    std::vector<std::string> multVec = split(reduce(multLine), ' ');
+    multiplicity = stoi(*(multVec.end()-1));
+    std::cout << "orcaplugin) Found molecule multiplicity: " << multiplicity << std::endl;
+    data->multiplicity = multiplicity;
+  } else {
+    std::cout << "orcaplugin) No molecule multiplicity found. Exiting" << std::endl;
+    return FALSE;
+  }
+
+  int nEl;
+  if (goto_keyline(data->file, "Number of Electrons", NULL)) {
+    GET_LINE(buffer,data->file);
+		std::string nElLine(buffer);
+    std::vector<std::string> nElVec = split(reduce(nElLine), ' ');
+    nEl = stoi(*(nElVec.end()-1));
+    std::cout << "orcaplugin) Found number of electrons: " << nEl << std::endl;
+    data->num_electrons = nEl;
+  } else {
+    std::cout << "orcaplugin) Number of electrons not found. Exiting" << std::endl;
+    return FALSE;
+  }
+
+  rewind(data->file);
 
 	return TRUE;
 }
@@ -1420,15 +1468,17 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
 
   // TODO: REMOVE!!!
   // hardcoded for TEST!!!
-  data->multiplicity = 1;
   data->num_occupied_A = occupiedOrbitals;
   data->num_occupied_B = occupiedOrbitals;
-  data->num_electrons = numberOfElectrons;
-  data->totalcharge = 0;
+  // data->num_electrons = numberOfElectrons;
+
+  // if (data->num_electrons != numberOfElectrons) {
+  //
+  // }
 
   std::cout << "----------------------------------------" << std::endl;
   std::cout << "Total number of orbitals: " << num_orbitals << std::endl;
-  std::cout << "Number of electrons: " << numberOfElectrons<< std::endl;
+  std::cout << "Number of electrons in read wf: " << numberOfElectrons<< std::endl;
   std::cout << "Number of occupied orbitals: " << occupiedOrbitals << std::endl;
   std::cout << "Number of contracted bf: " << numberContractedBf[0] << std::endl;
   std::cout << "----------------------------------------" << std::endl;
