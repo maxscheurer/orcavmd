@@ -277,7 +277,7 @@ std::string trim(const std::string& str,
 
 std::string reduce(const std::string& str,
                    const std::string& fill = " ",
-                   const std::string& whitespace = " \t")
+                   const std::string& whitespace = " \t\n")
 {
     // trim first
     auto result = trim(str, whitespace);
@@ -886,6 +886,11 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
     }
   }
 
+  if (get_scfdata(data, cur_ts) == FALSE) {
+    printf("orcaplugin) Couldn't find SCF iterations for timestep %d\n",
+           data->num_frames_read);
+  }
+
   /* Try reading canonical alpha/beta wavefunction */
   check_add_wavefunctions(data, cur_ts);
 
@@ -937,7 +942,40 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   return TRUE;
 }
 
+bool only_numbers(const std::vector<std::string>& l) {
+    for (auto s : l) {
+      if (s.find_first_not_of("0123456789-.") != std::string::npos) {
+        return false;
+      }
+    }
+    return true;
+}
+
 static int get_scfdata(qmdata_t *data, qm_timestep_t *ts) {
+  char buffer[BUFSIZ];
+  long filepos;
+  filepos = ftell(data->file);
+  if (!goto_keyline(data->file, "SCF ITERATIONS", NULL)) {
+    fseek(data->file, filepos, SEEK_SET);
+    ts->num_scfiter = 0;
+    return FALSE;
+  }
+  eatline(data->file, 2);
+  GET_LINE(buffer, data->file);
+  std::string scfIterLine(buffer);
+  int ncols = (split(reduce(scfIterLine), ' ')).size();
+  int currentCols, numiter = 0;
+  while (scfIterLine.find("SUCCESS") == std::string::npos && scfIterLine.find("ERROR") == std::string::npos) {
+    GET_LINE(buffer, data->file);
+    scfIterLine = buffer;
+    std::vector<std::string> currentCol = split(reduce(scfIterLine), ' ');
+    currentCols = currentCol.size();
+    if (currentCols == ncols && only_numbers(currentCol)) {
+      numiter++;
+    }
+  }
+  ts->num_scfiter = numiter;
+  std::cout << "orcaplugin) number of it: " << numiter << std::endl;
   return TRUE;
 }
 
@@ -1466,8 +1504,8 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     data->angular_momentum[ang] = wfAngMoment[ang];
   }
 
-  // TODO: REMOVE!!!
-  // hardcoded for TEST!!!
+  // TODO: This is just a workaround and might give wrong
+  // results when reading unrestricted jobs
   data->num_occupied_A = occupiedOrbitals;
   data->num_occupied_B = occupiedOrbitals;
   // data->num_electrons = numberOfElectrons;
