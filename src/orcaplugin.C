@@ -23,8 +23,8 @@ Inspired from gamessplugin.c
 
 typedef std::vector<std::vector<std::vector<float>>> MoCoeff;
 
-#define DEBUGGING 1
-#ifdef DEBUGGING
+#define DEBUGGING_ORCA 1
+#ifdef DEBUGGING_ORCA
 #define PRINTERR fprintf(stderr, "\n In file %s, line %d: \n %s \n \n", \
                            __FILE__, __LINE__, strerror(errno))
 #else
@@ -127,6 +127,8 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms, int natoms);
 
 static int get_scfdata(qmdata_t *data, qm_timestep_t *ts);
 
+static int get_population(qmdata_t *data, qm_timestep_t *ts);
+
 static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts);
 
 static int fill_basis_arrays(qmdata_t *data);
@@ -164,7 +166,7 @@ static void* open_orca_read(const char* filename, const char* filetype, int *nat
   FILE* fd;
   qmdata_t *data = NULL;
 
-  #ifdef DEBUGGING
+  #ifdef DEBUGGING_ORCA
     printf("DEBUG: Open Orca Read called: %s\n", filename);
   #endif
 
@@ -231,8 +233,8 @@ static int read_orca_structure(void *mydata, int *optflags, molfile_atom_t *atom
     atom->chain[0] = '\0';
     atom->segid[0] = '\0';
     atom->atomicnumber = cur_atom->atomicnum;
-    #ifdef DEBUGGING
-    printf("orcaplugin) atomicnum[%d] = %d\n", i, atom->atomicnumber);
+    #ifdef DEBUGGING_ORCA
+      printf("orcaplugin) atomicnum[%d] = %d\n", i, atom->atomicnumber);
     #endif
 
     /* if (data->have_mulliken)
@@ -360,7 +362,8 @@ static int get_job_info(qmdata_t *data) {
     data->totalcharge = totalCharge;
   } else {
     std::cout << "orcaplugin) No molecule charge found. Exiting" << std::endl;
-    return FALSE;
+    data->totalcharge = 0;
+    // return FALSE;
   }
 
   int multiplicity;
@@ -373,7 +376,8 @@ static int get_job_info(qmdata_t *data) {
     data->multiplicity = multiplicity;
   } else {
     std::cout << "orcaplugin) No molecule multiplicity found. Exiting" << std::endl;
-    return FALSE;
+    data->multiplicity = -1;
+    // return FALSE;
   }
 
   int nEl;
@@ -386,7 +390,8 @@ static int get_job_info(qmdata_t *data) {
     data->num_electrons = nEl;
   } else {
     std::cout << "orcaplugin) Number of electrons not found. Exiting" << std::endl;
-    return FALSE;
+    data->num_electrons = -1;
+    // return FALSE;
   }
 
   rewind(data->file);
@@ -410,7 +415,7 @@ static int have_orca(qmdata_t *data, orcadata* orca) {
   GET_LINE(buffer, data->file);
   if (strstr(buffer,"Version") != NULL) {
     sscanf(buffer, "%*s %*s %d.%d.%d", &mainVersion, &secondDigit, &thirdDigit);
-    #ifdef DEBUGGING
+    #ifdef DEBUGGING_ORCA
       printf("DEBUG: build: %d.%d.%d\n", mainVersion, secondDigit, thirdDigit);
     #endif
     int build[3] = { mainVersion, secondDigit, thirdDigit };
@@ -812,13 +817,6 @@ static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
 
 /* Read the first trajectory frame. */
 static int read_first_frame(qmdata_t *data) {
-  /* The angular momentum is populated in get_wavefunction
-   * which is called by get_traj_frame(). We have obtained
-   * the array size wavef_size already from the basis set
-   * statistics */
-
-  // data->angular_momentum = (int*)calloc(3*data->wavef_size, sizeof(int));
-
   /* Try reading the first frame.
    * If there is only one frame then also read the
    * final wavefunction. */
@@ -894,15 +892,10 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   /* Try reading canonical alpha/beta wavefunction */
   check_add_wavefunctions(data, cur_ts);
 
-  /* Read population analysis (Mulliken and Lowdin charges)
-   * only if wasn't read already while parsing the final
-   * property section. Otherwise we would potentially
-   * overwrite the data with empty fields. */
-  // if (!cur_ts->have_mulliken &&
-  //     get_population(data, cur_ts)) {
-  //   printf("orcaplugin) Mulliken/Loewdin charges found\n");
-  // }
-
+  /* Read point charged */
+  if (!cur_ts->have_mulliken && get_population(data, cur_ts)) {
+    printf("orcaplugin) Mulliken charges found\n");
+  }
 
   /* Read the energy gradients (= -forces on atoms) */
   // if (get_gradient(data, cur_ts)) {
@@ -937,7 +930,9 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   }
 
   data->num_frames_read++;
-  std::cout << "orcaplugin) Frames read: " << data->num_frames_read << std::endl;
+  #ifdef DEBUGGING_ORCA
+    std::cout << "orcaplugin) Frames read: " << data->num_frames_read << std::endl;
+  #endif
 
   return TRUE;
 }
@@ -975,7 +970,72 @@ static int get_scfdata(qmdata_t *data, qm_timestep_t *ts) {
     }
   }
   ts->num_scfiter = numiter;
-  std::cout << "orcaplugin) number of it: " << numiter << std::endl;
+  std::cout << "orcaplugin) Number of SCF iterations: " << numiter << std::endl;
+  return TRUE;
+}
+
+static int get_population(qmdata_t *data, qm_timestep_t *ts) {
+  int i;
+  char buffer[BUFSIZ];
+  long filepos;
+  ts->have_mulliken = FALSE;
+  ts->have_lowdin   = FALSE;
+  ts->have_esp      = FALSE;
+  filepos = ftell(data->file);
+
+  if (pass_keyline(data->file, "MULLIKEN ATOMIC CHARGES", NULL) != FOUND) {
+    fseek(data->file, filepos, SEEK_SET);
+    return FALSE;
+  }
+
+  /* Read Mulliken charges if present */
+  ts->mulliken_charges = (double *)calloc(data->numatoms, sizeof(double));
+
+  if (!ts->mulliken_charges) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  // ts->lowdin_charges = (double *)calloc(data->numatoms, sizeof(double));
+  //
+  // if (!ts->lowdin_charges) {
+  //   free(ts->mulliken_charges);
+  //   ts->mulliken_charges = NULL;
+  //   PRINTERR;
+  //   return FALSE;
+  // }
+  eatline(data->file, 1);
+
+  for (i=0; i<data->numatoms; i++) {
+    int n;
+    float mullcharge;
+    int aIndex;
+    GET_LINE(buffer, data->file);
+    std::string currentLine(buffer);
+    std::vector<std::string> elements = split(reduce(currentLine), ' ');
+    n = elements.size();
+    if (n!=4) {
+      free(ts->mulliken_charges);
+      // free(ts->lowdin_charges);
+      ts->mulliken_charges = NULL;
+      // ts->lowdin_charges   = NULL;
+      return FALSE;
+    }
+    mullcharge = stof(*(elements.end()-1));
+    ts->mulliken_charges[i] = mullcharge;
+    // ts->lowdin_charges[i]   = lowcharge;
+  }
+
+  if (i!=data->numatoms) {
+    free(ts->mulliken_charges);
+    free(ts->lowdin_charges);
+    ts->mulliken_charges = NULL;
+    ts->lowdin_charges   = NULL;
+    return FALSE;
+  }
+
+  ts->have_mulliken = TRUE;
+  // ts->have_lowdin   = TRUE;
   return TRUE;
 }
 
@@ -1007,7 +1067,7 @@ static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
     if (get_wavefunction(data, ts, wavef) == FALSE) {
       /* Free the last wavefunction again. */
       del_wavefunction(ts);
-#ifdef DEBUGGING
+#ifdef DEBUGGING_ORCA
       printf("orcaplugin) No canonical wavefunction present for timestep %d\n", data->num_frames_read);
 #endif
       break;
@@ -1190,13 +1250,13 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   } while(wf->type == MOLFILE_WAVE_UNKNOWN && strcmp(line, "FINAL SINGLE POINT ENERGY"));
 
   if(wf->type == MOLFILE_WAVE_UNKNOWN) {
-    #ifdef DEBUGGING
+    #ifdef DEBUGGING_ORCA
         printf("orcaplugin) get_wavefunction(): No wavefunction found!\n");
     #endif
         fseek(data->file, filepos, SEEK_SET);
         return FALSE;
   } else {
-    #ifdef DEBUGGING
+    #ifdef DEBUGGING_ORCA
       printf("orcaplugin) Found wavefunction of type %d.\n", wf->type);
     #endif
   }
@@ -2026,14 +2086,14 @@ static int read_timestep(void *mydata, int natoms,
   // }
   //
   // /* store charge sets*/
-  // if (cur_ts->have_mulliken) {
-  //   offset = num_charge_sets*data->numatoms;
-  //   for (i=0; i<data->numatoms; i++) {
-  //     qm_ts->charges[offset+i] = cur_ts->mulliken_charges[i];
-  //   }
-  //   qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_MULLIKEN;
-  //   num_charge_sets++;
-  // }
+  if (cur_ts->have_mulliken) {
+    offset = num_charge_sets*data->numatoms;
+    for (i=0; i<data->numatoms; i++) {
+      qm_ts->charges[offset+i] = cur_ts->mulliken_charges[i];
+    }
+    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_MULLIKEN;
+    num_charge_sets++;
+  }
   //
   // if (cur_ts->have_lowdin) {
   //   offset = num_charge_sets*data->numatoms;
