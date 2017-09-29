@@ -18,8 +18,6 @@ Authors: Maximilian Scheurer, Marcelo Melo, May 2017
 #include "unit_conversion.h"
 #include "periodic_table.h"
 
-typedef std::vector<std::vector<std::vector<float>>> MoCoeff;
-typedef std::vector<std::vector<float>> CoeffRowBlock;
 
 #define DEBUGGING 1
 #ifdef DEBUGGING
@@ -51,7 +49,24 @@ typedef struct {
 static int have_mopac(qmdata_t *data, mopacdata* mopac);
 static int parse_static_data(qmdata_t *data, int* natoms);
 static void* open_mopac_read(const char* filename, const char* filetype, int *natoms);
+static int get_job_info(qmdata_t *data);
 
+static int get_job_info(qmdata_t *data) {
+  long filepos;
+  char buffer[BUFSIZ];
+  filepos = ftell(data->file);
+  if (goto_keyline(data->file, "CALCULATION DONE", NULL)) {
+    if (!(goto_keyline(data->file, "*  VECTORS", NULL) && goto_keyline(data->file, "*  EIGEN", NULL))) {
+      printf("mopacplugin) Specify the VECTORS and EIGEN keyword in your input file! Otherwise VMD cannot deal with MOPAC output!\n");
+      return FALSE;
+    }
+  } else {
+    printf("mopacplugin) MOPAC calculation did not succeed.\n");
+    return FALSE;
+  }
+
+  return TRUE;
+}
 
 static int have_mopac(qmdata_t *data, mopacdata* mopac) {
   int programLine;
@@ -68,9 +83,12 @@ static int have_mopac(qmdata_t *data, mopacdata* mopac) {
   return TRUE;
 }
 
+
+
+
 static int parse_static_data(qmdata_t *data, int* natoms) {
   mopacdata *mopac = (mopacdata *)data->format_specific_data;
-  // if (!get_job_info(data)) return FALSE;
+  if (!get_job_info(data)) return FALSE;
 
   // if (!get_input_structure(data, mopac)) return FALSE;
 
@@ -80,7 +98,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
     // printf("mopacplugin) WARNING: Truncated or abnormally terminated file!\n\n");
   // }
 
-  // *natoms = data->numatoms;
+  *natoms = data->numatoms;
 
   // read_first_frame(data);
 
