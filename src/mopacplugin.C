@@ -50,6 +50,8 @@ static int have_mopac(qmdata_t *data, mopacdata* mopac);
 static int parse_static_data(qmdata_t *data, int* natoms);
 static void* open_mopac_read(const char* filename, const char* filetype, int *natoms);
 static int get_job_info(qmdata_t *data);
+static int get_input_structure(qmdata_t *data, mopacdata *mopac);
+static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit, int *numatoms);
 
 static int get_job_info(qmdata_t *data) {
   long filepos;
@@ -84,13 +86,115 @@ static int have_mopac(qmdata_t *data, mopacdata* mopac) {
 }
 
 
+static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
+                           int *numatoms) {
+  int i = 0;
+  int growarray = 0;
+
+  if (*numatoms<0) {
+    *atoms = (qm_atom_t*)calloc(1, sizeof(qm_atom_t));
+    growarray = 1;
+  }
+
+  /* Read in the coordinates until an empty line is reached.
+   * We expect 5 entries per line */
+  while (1) {
+    char buffer[BUFSIZ];
+    char atname[BUFSIZ];
+    float atomicnum;
+    float x,y,z, dum;
+    int list_idx;
+    int n;
+    qm_atom_t *atm;
+
+    GET_LINE(buffer, file);
+    // thisline(file);
+
+    n = sscanf(buffer,"%d %s %f %f %f", &list_idx, atname, &x, &y, &z);
+    // printf("%s\n", atname);
+    if (n!=5) {
+      // n = sscanf(buffer,"%s %f %f %f %f",atname,&atomicnum,&x,&y,&z);
+      break;
+    }
+    // if (n!=5 && n!=6) break;
+
+    if (growarray && i>0) {
+      *atoms = (qm_atom_t*)realloc(*atoms, (i+1)*sizeof(qm_atom_t));
+    }
+    atm = (*atoms)+i;
+
+    // just get the atomic number from periodic_table.h
+    atomicnum = get_pte_idx(atname);
+
+    strncpy(atm->type, atname, sizeof(atm->type));
+    atm->atomicnum = floor(atomicnum+0.5); /* nuclear charge */
+    printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
+
+    /* if coordinates are in Bohr convert them to Angstrom */
+    if (unit==BOHR) {
+      x *= BOHR_TO_ANGS;
+      y *= BOHR_TO_ANGS;
+      z *= BOHR_TO_ANGS;
+    }
+
+    atm->x = x;
+    atm->y = y;
+    atm->z = z;
+    i++;
+  }
+
+  /* If file is broken off in the middle of the coordinate block
+   * we cannot use this frame. */
+  if (*numatoms>=0 && *numatoms!=i) {
+    (*numatoms) = i;
+    return FALSE;
+  }
+
+  (*numatoms) = i;
+  return TRUE;
+}
+
+
+static int get_input_structure(qmdata_t *data, mopacdata *mopac) {
+  char buffer[BUFSIZ];
+  char units[BUFSIZ];
+  int numatoms = -1;
+  int bohr;
+  long filepos;
+  filepos = ftell(data->file);
+
+  if (goto_keyline(data->file, "CARTESIAN COORDINATES", NULL)) {
+    GET_LINE(buffer, data->file);
+    thisline(data->file);
+    // UNITS ARE ANGSTROEM
+    bohr = 0;
+    // sscanf()
+  } else {
+    printf("mopacplugin) No cartesian coordinates in ANGSTROEM found.\n");
+    return FALSE;
+  }
+
+  // skip the blank line, line with header and another blank line
+  eatline(data->file, 3);
+  /* Read the coordinate block */
+  if (get_coordinates(data->file, &data->atoms, bohr, &numatoms))
+    data->num_frames_read = 0;
+  else {
+    printf("mopacplugin) Bad atom coordinate block!\n");
+    return FALSE;
+  }
+
+  data->numatoms = numatoms;
+  printf("Number of atoms: %d\n", numatoms);
+  return TRUE;
+}
 
 
 static int parse_static_data(qmdata_t *data, int* natoms) {
   mopacdata *mopac = (mopacdata *)data->format_specific_data;
   if (!get_job_info(data)) return FALSE;
 
-  // if (!get_input_structure(data, mopac)) return FALSE;
+  if (!get_input_structure(data, mopac)) return FALSE;
 
   // if (!get_basis(data)) return FALSE;
 
