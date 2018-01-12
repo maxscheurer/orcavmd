@@ -53,6 +53,9 @@ static int get_job_info(qmdata_t *data);
 static int get_input_structure(qmdata_t *data, mopacdata *mopac);
 static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit, int *numatoms);
 
+static void close_mopac_read(void *mydata);
+static void print_input_data(qmdata_t *data);
+
 static int get_job_info(qmdata_t *data) {
   long filepos;
   char buffer[BUFSIZ];
@@ -206,9 +209,9 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   // read_first_frame(data);
 
-  // print_input_data(data);
+  print_input_data(data);
 
-  return FALSE;
+  return TRUE;
 }
 
 
@@ -317,8 +320,8 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.is_reentrant = VMDPLUGIN_THREADUNSAFE;
   plugin.filename_extension = "mopac";
   plugin.open_file_read = open_mopac_read;
-  // plugin.read_structure = read_mopac_structure;
-  // plugin.close_file_read = close_mopac_read;
+  plugin.read_structure = read_mopac_structure;
+  plugin.close_file_read = close_mopac_read;
   //
   // plugin.read_qm_metadata = read_mopac_metadata;
   // plugin.read_qm_rundata  = read_mopac_rundata;
@@ -443,14 +446,14 @@ static void print_input_data(qmdata_t *data) {
   printf(" THE MOMENTS OF INERTIA ARE (AMU-ANGSTROM**2)\n");
   printf(" IXX=%10.3f   IYY=%10.3f   IZZ=%10.3f\n", 0.0, 0.0, 0.0);
   printf("\n");
-  printf(" ATOM      ATOMIC                      COORDINATES (BOHR)\n");
+  printf(" ATOM      ATOMIC                      COORDINATES (Angstroem)\n");
   printf("           CHARGE         X                   Y                   Z\n");
   for (i=0; i<data->numatoms; i++) {
     printf(" %-8s %6d", data->atoms[i].type, data->atoms[i].atomicnum);
 
-    printf("%17.10f",   ANGS_TO_BOHR*data->atoms[i].x);
-    printf("%20.10f",   ANGS_TO_BOHR*data->atoms[i].y);
-    printf("%20.10f\n", ANGS_TO_BOHR*data->atoms[i].z);
+    printf("%17.10f",   data->atoms[i].x);
+    printf("%20.10f",   data->atoms[i].y);
+    printf("%20.10f\n", data->atoms[i].z);
   }
   printf("\n");
   printf("     ATOMIC BASIS SET\n");

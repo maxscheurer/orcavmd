@@ -21,9 +21,9 @@ SCXXFLAGS = $(CCFLAGS) $(DEF)"STATIC_PLUGIN"
 # Rules
 #
 
-STATICPLUGINS = abinitplugin avsplugin babelplugin basissetplugin bgfplugin binposplugin biomoccaplugin brixplugin carplugin ccp4plugin corplugin cpmdplugin crdplugin cubeplugin dcdplugin dlpolyplugin dsn6plugin dxplugin edmplugin fs4plugin gamessplugin graspplugin grdplugin gridplugin gromacsplugin jsplugin lammpsplugin mapplugin mdfplugin mol2plugin moldenplugin molemeshplugin msmsplugin namdbinplugin offplugin parm7plugin parmplugin pbeqplugin pdbplugin pdbxplugin phiplugin pltplugin plyplugin pqrplugin psfplugin raster3dplugin rst7plugin situsplugin spiderplugin stlplugin tinkerplugin uhbdplugin vaspchgcarplugin vaspoutcarplugin vaspparchgplugin vaspposcarplugin vasp5xdatcarplugin vaspxdatcarplugin vaspxmlplugin vtkplugin xbgfplugin xsfplugin xyzplugin orcaplugin
+STATICPLUGINS = abinitplugin avsplugin babelplugin basissetplugin bgfplugin binposplugin biomoccaplugin brixplugin carplugin ccp4plugin corplugin cpmdplugin crdplugin cubeplugin dcdplugin dlpolyplugin dsn6plugin dxplugin edmplugin fs4plugin gamessplugin graspplugin grdplugin gridplugin gromacsplugin jsplugin lammpsplugin mapplugin mdfplugin mol2plugin moldenplugin molemeshplugin msmsplugin namdbinplugin offplugin parm7plugin parmplugin pbeqplugin pdbplugin pdbxplugin phiplugin pltplugin plyplugin pqrplugin psfplugin raster3dplugin rst7plugin situsplugin spiderplugin stlplugin tinkerplugin uhbdplugin vaspchgcarplugin vaspoutcarplugin vaspparchgplugin vaspposcarplugin vasp5xdatcarplugin vaspxdatcarplugin vaspxmlplugin vtkplugin xbgfplugin xsfplugin xyzplugin orcaplugin mopacplugin
 
-PLUGINS = abinitplugin.so avsplugin.so babelplugin.so basissetplugin.so bgfplugin.so binposplugin.so biomoccaplugin.so brixplugin.so carplugin.so ccp4plugin.so corplugin.so cpmdplugin.so crdplugin.so cubeplugin.so dcdplugin.so dlpolyplugin.so dsn6plugin.so dxplugin.so edmplugin.so fs4plugin.so gamessplugin.so graspplugin.so grdplugin.so gridplugin.so gromacsplugin.so jsplugin.so lammpsplugin.so mapplugin.so mdfplugin.so mol2plugin.so moldenplugin.so molemeshplugin.so msmsplugin.so namdbinplugin.so offplugin.so parm7plugin.so parmplugin.so pbeqplugin.so pdbplugin.so pdbxplugin.so phiplugin.so pltplugin.so plyplugin.so pqrplugin.so psfplugin.so raster3dplugin.so rst7plugin.so situsplugin.so spiderplugin.so stlplugin.so tinkerplugin.so uhbdplugin.so vaspchgcarplugin.so vaspoutcarplugin.so vaspparchgplugin.so vaspposcarplugin.so vasp5xdatcarplugin.so vaspxdatcarplugin.so vaspxmlplugin.so vtkplugin.so xbgfplugin.so xsfplugin.so xyzplugin.so orcaplugin.so
+PLUGINS = abinitplugin.so avsplugin.so babelplugin.so basissetplugin.so bgfplugin.so binposplugin.so biomoccaplugin.so brixplugin.so carplugin.so ccp4plugin.so corplugin.so cpmdplugin.so crdplugin.so cubeplugin.so dcdplugin.so dlpolyplugin.so dsn6plugin.so dxplugin.so edmplugin.so fs4plugin.so gamessplugin.so graspplugin.so grdplugin.so gridplugin.so gromacsplugin.so jsplugin.so lammpsplugin.so mapplugin.so mdfplugin.so mol2plugin.so moldenplugin.so molemeshplugin.so msmsplugin.so namdbinplugin.so offplugin.so parm7plugin.so parmplugin.so pbeqplugin.so pdbplugin.so pdbxplugin.so phiplugin.so pltplugin.so plyplugin.so pqrplugin.so psfplugin.so raster3dplugin.so rst7plugin.so situsplugin.so spiderplugin.so stlplugin.so tinkerplugin.so uhbdplugin.so vaspchgcarplugin.so vaspoutcarplugin.so vaspparchgplugin.so vaspposcarplugin.so vasp5xdatcarplugin.so vaspxdatcarplugin.so vaspxmlplugin.so vtkplugin.so xbgfplugin.so xsfplugin.so xyzplugin.so orcaplugin.so mopacplugin.so
 
 
 #
@@ -231,6 +231,9 @@ gamessplugin.so: ${ARCHDIR}/gamessplugin.o
 	$(SHLD) $(LOPTO)${ARCHDIR}/$@ $? $(LDFLAGS)
 
 orcaplugin.so: ${ARCHDIR}/orcaplugin.o ${ARCHDIR}/Matrix.o
+	$(SHLD) $(LOPTO)${ARCHDIR}/$@ $? $(LDFLAGS)
+
+mopacplugin.so: ${ARCHDIR}/mopacplugin.o
 	$(SHLD) $(LOPTO)${ARCHDIR}/$@ $? $(LDFLAGS)
 
 graspplugin.so: ${ARCHDIR}/graspplugin.o
@@ -468,6 +471,9 @@ ${ARCHDIR}/gamessplugin.o: gamessplugin.c ${PLUGINAPI} qmplugin.h periodic_table
 ${ARCHDIR}/orcaplugin.o: orcaplugin.C ${PLUGINAPI} qmplugin.h periodic_table.h unit_conversion.h Matrix.h
 	$(CC) $(CCFLAGS) -std=c++11 $(SHLDFLAGS) $(INCDIR) -c $< $(COPTO)$@
 
+${ARCHDIR}/mopacplugin.o: mopacplugin.C ${PLUGINAPI} qmplugin.h periodic_table.h unit_conversion.h
+	$(CC) $(CCFLAGS) -std=c++11 $(SHLDFLAGS) $(INCDIR) -c $< $(COPTO)$@
+
 ${ARCHDIR}/Matrix.o: Matrix.cpp
 	$(CC) $(CCFLAGS) -std=c++11 $(SHLDFLAGS) $(INCDIR) -c $< $(COPTO)$@
 
@@ -641,7 +647,7 @@ ${ARCHDIR}/tngplugin.o: tngplugin.C ${PLUGINAPI}
 #
 # archive rules
 #
-ARCHIVEOBJS = ${ARCHDIR}/abinitplugin-s.o ${ARCHDIR}/avsplugin-s.o ${ARCHDIR}/babelplugin-s.o ${ARCHDIR}/basissetplugin-s.o ${ARCHDIR}/bgfplugin-s.o ${ARCHDIR}/binposplugin-s.o ${ARCHDIR}/biomoccaplugin-s.o ${ARCHDIR}/brixplugin-s.o ${ARCHDIR}/carplugin-s.o ${ARCHDIR}/ccp4plugin-s.o ${ARCHDIR}/corplugin-s.o ${ARCHDIR}/cpmdplugin-s.o ${ARCHDIR}/crdplugin-s.o ${ARCHDIR}/cubeplugin-s.o ${ARCHDIR}/dcdplugin-s.o ${ARCHDIR}/dlpolyplugin-s.o ${ARCHDIR}/dsn6plugin-s.o ${ARCHDIR}/dxplugin-s.o ${ARCHDIR}/edmplugin-s.o ${ARCHDIR}/fs4plugin-s.o ${ARCHDIR}/gamessplugin-s.o ${ARCHDIR}/orcaplugin-s.o {ARCHDIR}/graspplugin-s.o ${ARCHDIR}/grdplugin-s.o ${ARCHDIR}/gridplugin-s.o ${ARCHDIR}/gromacsplugin-s.o ${ARCHDIR}/jsplugin-s.o ${ARCHDIR}/lammpsplugin-s.o ${ARCHDIR}/mapplugin-s.o ${ARCHDIR}/mdfplugin-s.o ${ARCHDIR}/mol2plugin-s.o ${ARCHDIR}/moldenplugin-s.o ${ARCHDIR}/molemeshplugin-s.o ${ARCHDIR}/msmsplugin-s.o ${ARCHDIR}/namdbinplugin-s.o ${ARCHDIR}/offplugin-s.o ${ARCHDIR}/parm7plugin-s.o ${ARCHDIR}/parmplugin-s.o ${ARCHDIR}/pbeqplugin-s.o ${ARCHDIR}/pdbplugin-s.o ${ARCHDIR}/pdbxplugin-s.o ${ARCHDIR}/phiplugin-s.o ${ARCHDIR}/pltplugin-s.o ${ARCHDIR}/plyplugin-s.o ${ARCHDIR}/pqrplugin-s.o ${ARCHDIR}/psfplugin-s.o ${ARCHDIR}/raster3dplugin-s.o ${ARCHDIR}/rst7plugin-s.o ${ARCHDIR}/situsplugin-s.o ${ARCHDIR}/spiderplugin-s.o ${ARCHDIR}/stlplugin-s.o ${ARCHDIR}/tinkerplugin-s.o ${ARCHDIR}/uhbdplugin-s.o ${ARCHDIR}/vaspchgcarplugin-s.o ${ARCHDIR}/vaspoutcarplugin-s.o ${ARCHDIR}/vaspparchgplugin-s.o ${ARCHDIR}/vaspposcarplugin-s.o ${ARCHDIR}/vasp5xdatcarplugin-s.o ${ARCHDIR}/vaspxdatcarplugin-s.o ${ARCHDIR}/vaspxmlplugin-s.o ${ARCHDIR}/vtkplugin-s.o ${ARCHDIR}/xbgfplugin-s.o ${ARCHDIR}/xsfplugin-s.o ${ARCHDIR}/xyzplugin-s.o
+ARCHIVEOBJS = ${ARCHDIR}/abinitplugin-s.o ${ARCHDIR}/avsplugin-s.o ${ARCHDIR}/babelplugin-s.o ${ARCHDIR}/basissetplugin-s.o ${ARCHDIR}/bgfplugin-s.o ${ARCHDIR}/binposplugin-s.o ${ARCHDIR}/biomoccaplugin-s.o ${ARCHDIR}/brixplugin-s.o ${ARCHDIR}/carplugin-s.o ${ARCHDIR}/ccp4plugin-s.o ${ARCHDIR}/corplugin-s.o ${ARCHDIR}/cpmdplugin-s.o ${ARCHDIR}/crdplugin-s.o ${ARCHDIR}/cubeplugin-s.o ${ARCHDIR}/dcdplugin-s.o ${ARCHDIR}/dlpolyplugin-s.o ${ARCHDIR}/dsn6plugin-s.o ${ARCHDIR}/dxplugin-s.o ${ARCHDIR}/edmplugin-s.o ${ARCHDIR}/fs4plugin-s.o ${ARCHDIR}/gamessplugin-s.o ${ARCHDIR}/mopacplugin-s.o ${ARCHDIR}/orcaplugin-s.o {ARCHDIR}/graspplugin-s.o ${ARCHDIR}/grdplugin-s.o ${ARCHDIR}/gridplugin-s.o ${ARCHDIR}/gromacsplugin-s.o ${ARCHDIR}/jsplugin-s.o ${ARCHDIR}/lammpsplugin-s.o ${ARCHDIR}/mapplugin-s.o ${ARCHDIR}/mdfplugin-s.o ${ARCHDIR}/mol2plugin-s.o ${ARCHDIR}/moldenplugin-s.o ${ARCHDIR}/molemeshplugin-s.o ${ARCHDIR}/msmsplugin-s.o ${ARCHDIR}/namdbinplugin-s.o ${ARCHDIR}/offplugin-s.o ${ARCHDIR}/parm7plugin-s.o ${ARCHDIR}/parmplugin-s.o ${ARCHDIR}/pbeqplugin-s.o ${ARCHDIR}/pdbplugin-s.o ${ARCHDIR}/pdbxplugin-s.o ${ARCHDIR}/phiplugin-s.o ${ARCHDIR}/pltplugin-s.o ${ARCHDIR}/plyplugin-s.o ${ARCHDIR}/pqrplugin-s.o ${ARCHDIR}/psfplugin-s.o ${ARCHDIR}/raster3dplugin-s.o ${ARCHDIR}/rst7plugin-s.o ${ARCHDIR}/situsplugin-s.o ${ARCHDIR}/spiderplugin-s.o ${ARCHDIR}/stlplugin-s.o ${ARCHDIR}/tinkerplugin-s.o ${ARCHDIR}/uhbdplugin-s.o ${ARCHDIR}/vaspchgcarplugin-s.o ${ARCHDIR}/vaspoutcarplugin-s.o ${ARCHDIR}/vaspparchgplugin-s.o ${ARCHDIR}/vaspposcarplugin-s.o ${ARCHDIR}/vasp5xdatcarplugin-s.o ${ARCHDIR}/vaspxdatcarplugin-s.o ${ARCHDIR}/vaspxmlplugin-s.o ${ARCHDIR}/vtkplugin-s.o ${ARCHDIR}/xbgfplugin-s.o ${ARCHDIR}/xsfplugin-s.o ${ARCHDIR}/xyzplugin-s.o
 
 
 #
@@ -794,6 +800,9 @@ ${ARCHDIR}/gamessplugin-s.o: gamessplugin.c ${PLUGINAPI} qmplugin.h periodic_tab
 
 ${ARCHDIR}/orcaplugin-s.o: orcaplugin.C ${PLUGINAPI} qmplugin.h periodic_table.h unit_conversion.h Matrix.h
 	${CC} ${SCCFLAGS} -std=c++11 $(INCDIR) $(DEF)"VMDPLUGIN=molfile_orcaplugin" -c $< $(COPTO)$@
+
+${ARCHDIR}/mopacplugin-s.o: mopacplugin.C ${PLUGINAPI} qmplugin.h periodic_table.h unit_conversion.h
+	${CC} ${SCCFLAGS} -std=c++11 $(INCDIR) $(DEF)"VMDPLUGIN=molfile_mopacplugin" -c $< $(COPTO)$@
 
 ${ARCHDIR}/graspplugin-s.o: graspplugin.C ${PLUGINAPI}
 	${CXX} ${SCXXFLAGS} $(INCDIR) $(DEF)"VMDPLUGIN=molfile_graspplugin" -c $< $(COPTO)$@
