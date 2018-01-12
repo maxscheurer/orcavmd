@@ -52,6 +52,9 @@ static void* open_mopac_read(const char* filename, const char* filetype, int *na
 static int get_job_info(qmdata_t *data);
 static int get_input_structure(qmdata_t *data, mopacdata *mopac);
 static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit, int *numatoms);
+static int analyze_traj(qmdata_t *data, mopacdata *mopac);
+
+static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms, int natoms);
 
 static void close_mopac_read(void *mydata);
 static void print_input_data(qmdata_t *data);
@@ -69,6 +72,7 @@ static int get_job_info(qmdata_t *data) {
     printf("mopacplugin) MOPAC calculation did not succeed.\n");
     return FALSE;
   }
+  data->runtype = MOLFILE_RUNTYPE_ENERGY;
 
   return TRUE;
 }
@@ -192,6 +196,18 @@ static int get_input_structure(qmdata_t *data, mopacdata *mopac) {
   return TRUE;
 }
 
+/* Read the first trajectory frame. */
+static int read_first_frame(qmdata_t *data) {
+  /* Try reading the first frame.
+   * If there is only one frame then also read the
+   * final wavefunction. */
+  if (!get_traj_frame(data, data->atoms, data->numatoms)) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
 
 static int parse_static_data(qmdata_t *data, int* natoms) {
   mopacdata *mopac = (mopacdata *)data->format_specific_data;
@@ -201,15 +217,168 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   // if (!get_basis(data)) return FALSE;
 
-  // if (!analyze_traj(data, mopac)) {
-    // printf("mopacplugin) WARNING: Truncated or abnormally terminated file!\n\n");
-  // }
+  if (!analyze_traj(data, mopac)) {
+    printf("mopacplugin) WARNING: Truncated or abnormally terminated file!\n\n");
+  }
 
   *natoms = data->numatoms;
 
-  // read_first_frame(data);
+  read_first_frame(data);
 
-  print_input_data(data);
+  // print_input_data(data);
+
+  return TRUE;
+}
+
+/* Analyze the trajectory.
+ * Read the parameters controlling geometry search and
+ * find the end of the trajectory, couinting the frames
+ * on the way. Store the filepointer for the beginning of
+ * each frame in *filepos_array. */
+static int analyze_traj(qmdata_t *data, mopacdata *mopac) {
+  char buffer[BUFSIZ], nserch[BUFSIZ];
+  char *line;
+  long filepos;
+  filepos = ftell(data->file);
+
+  data->filepos_array = (long* )calloc(1, sizeof(long ));
+
+  /* currently, only one frame is supported!
+   * lines 3130-3348 in gamessplugin.c
+   */
+  if (data->runtype == MOLFILE_RUNTYPE_ENERGY) {
+    /* We have just one frame */
+    data->num_frames = 1;
+    pass_keyline(data->file, "1SCF WAS SPECIFIED", NULL);
+    data->filepos_array[0] = ftell(data->file);
+
+    /* Check wether SCF has converged */
+    // if (pass_keyline(data->file,
+    //                  "SCF IS UNCONVERGED, TOO MANY ITERATIONS",
+    //                  "ENERGY COMPONENTS")==FOUND) {
+    //   printf("mopacplugin) SCF IS UNCONVERGED, TOO MANY ITERATIONS\n");
+    //   data->status = MOLFILE_QMSTATUS_SCF_NOT_CONV;
+    // } else {
+    //   data->status = MOLFILE_QMSTATUS_OPT_CONV;
+    //   fseek(data->file, data->filepos_array[0], SEEK_SET);
+    // }
+
+    pass_keyline(data->file, "== MOPAC DONE ==", NULL);
+    data->end_of_traj = ftell(data->file);
+
+    /* Allocate memory for the frame */
+    data->qm_timestep = (qm_timestep_t *)calloc(1, sizeof(qm_timestep_t));
+    memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
+
+    return TRUE;
+  } else if (data->runtype == MOLFILE_RUNTYPE_GRADIENT) {
+    int appendedCalculations = 0;
+    rewind(data->file);
+    pass_keyline(data->file, "Energy+Gradient Calculation", NULL); // TODO: adapt
+    data->filepos_array[0] = ftell(data->file);
+    data->num_frames = 1;
+
+    while(TRUE) {
+      if (!fgets(buffer, sizeof(buffer), data->file)) break;
+      line = trimleft(buffer);
+
+      std::string l(line);
+      if (l.find("Energy+Gradient Calculation") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_GRADIENT) {
+        appendedCalculations++;
+        // std::cout << l << std::endl;
+        if (data->num_frames > 0) {
+          data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
+        }
+        data->filepos_array[data->num_frames] = ftell(data->file);
+        data->num_frames++;
+      }
+    }
+
+    if (appendedCalculations) {
+      std::cout << "mopacplugin) Found multiple appended gradient calculations: " << data->num_frames << std::endl;
+      pass_keyline(data->file, "FINAL SINGLE POINT ENERGY", NULL);
+      data->end_of_traj = ftell(data->file);
+      fseek(data->file, filepos, SEEK_SET);
+
+      data->qm_timestep = (qm_timestep_t *)calloc(data->num_frames,
+                                                  sizeof(qm_timestep_t));
+      memset(data->qm_timestep, 0, data->num_frames*sizeof(qm_timestep_t));
+    } else {
+      data->num_frames = 1;
+      pass_keyline(data->file, "FINAL SINGLE POINT ENERGY", NULL);
+      data->end_of_traj = ftell(data->file);
+
+      /* Allocate memory for the frame */
+      data->qm_timestep = (qm_timestep_t *)calloc(data->num_frames, sizeof(qm_timestep_t));
+      memset(data->qm_timestep, 0, sizeof(qm_timestep_t));
+    }
+    return TRUE;
+  }
+  else if (data->runtype == MOLFILE_RUNTYPE_OPTIMIZE) {
+    std::cout << "mopacplugin) Reading trajectory of optimization." << std::endl;
+    rewind(data->file);
+    goto_keyline(data->file, "Geometry Optimization Run", NULL);
+  }
+  else {
+    std::cout << "mopacplugin) Jobtype not supported for trajectory reading." << std::endl;
+    return FALSE;
+  }
+
+  // printf("mopacplugin) Analyzing trajectory...\n");
+  data->status = MOLFILE_QMSTATUS_UNKNOWN;
+
+  while (TRUE) {
+    if (!fgets(buffer, sizeof(buffer), data->file)) break;
+    line = trimleft(buffer);
+
+    std::string l(line);
+    if (l.find("GEOMETRY OPTIMIZATION CYCLE") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_OPTIMIZE) {
+      // std::cout << l << std::endl;
+      if (data->num_frames > 0) {
+        data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
+      }
+      data->filepos_array[data->num_frames] = ftell(data->file);
+      data->num_frames++;
+    }
+    else if (l.find("THE OPTIMIZATION HAS CONVERGED") != std::string::npos) {
+      printf("mopacplugin) ==== End of trajectory (%d frames) ====\n", data->num_frames);
+      data->status = MOLFILE_QMSTATUS_OPT_CONV;
+    }
+    else if (data->status == MOLFILE_QMSTATUS_OPT_CONV) {
+      if(l.find("FINAL ENERGY EVALUATION AT THE STATIONARY POINT") != std::string::npos) {
+        if (data->num_frames > 0) {
+          data->filepos_array = (long*)realloc(data->filepos_array, (data->num_frames+1)*sizeof(long));
+        }
+        std::cout << "mopacplugin) found equilibrium geometry." << std::endl;
+        data->filepos_array[data->num_frames] = ftell(data->file);
+        data->num_frames++;
+        goto_keyline(data->file, "TOTAL RUN TIME", NULL);
+        break;
+      }
+    }
+  }
+
+  data->end_of_traj = ftell(data->file);
+  fseek(data->file, filepos, SEEK_SET);
+
+  if (data->status == MOLFILE_QMSTATUS_UNKNOWN) {
+    /* We didn't find any of the regular key strings,
+     * the run was most likely broken off and we have an
+     * incomplete file. */
+    data->status = MOLFILE_QMSTATUS_FILE_TRUNCATED;
+  }
+
+
+  /* Allocate memory for all frames */
+  data->qm_timestep = (qm_timestep_t *)calloc(data->num_frames,
+                                              sizeof(qm_timestep_t));
+  memset(data->qm_timestep, 0, data->num_frames*sizeof(qm_timestep_t));
+
+
+  if (data->status == MOLFILE_QMSTATUS_SCF_NOT_CONV ||
+      data->status == MOLFILE_QMSTATUS_FILE_TRUNCATED) {
+    return FALSE;
+  }
 
   return TRUE;
 }
@@ -300,6 +469,308 @@ static int read_mopac_structure(void *mydata, int *optflags, molfile_atom_t *ato
 }
 
 
+#if vmdplugin_ABIVERSION > 11
+
+/***********************************************************
+ * Provide non-QM metadata for next timestep.
+ * Required by the plugin interface.
+ ***********************************************************/
+static int read_timestep_metadata(void *mydata,
+                                  molfile_timestep_metadata_t *meta) {
+  meta->count = -1;
+  meta->has_velocities = 0;
+
+  return MOLFILE_SUCCESS;
+}
+/***********************************************************
+ *
+ * This function provides the data of the next timestep.
+ * Here we actually don't read the data from file, that had
+ * to be done already upon calling read_timestep_metadata().
+ * Instead we copy the stuff from the local data structure
+ * into the one's provided by VMD.
+ *
+ ***********************************************************/
+static int read_timestep(void *mydata, int natoms,
+       molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
+			 molfile_qm_timestep_t *qm_ts)
+{
+  qmdata_t *data = (qmdata_t *)mydata;
+  qm_timestep_t *cur_ts;
+  int offset;
+  int i = 0;
+  int num_charge_sets = 0;
+
+  if (data->trajectory_done == TRUE) {
+    printf("mopacplugin) Trajectory done.\n");
+    return MOLFILE_ERROR;
+  }
+
+  /* copy the coordinates */
+  for (i=0; i<natoms; i++) {
+    ts->coords[3*i  ] = data->atoms[i].x;
+    ts->coords[3*i+1] = data->atoms[i].y;
+    ts->coords[3*i+2] = data->atoms[i].z;
+    // printf("x: %f y: %f z: %f\n", data->atoms[i].x, data->atoms[i].y, data->atoms[i].z);
+  }
+
+  /* get a convenient pointer to the current qm timestep */
+  cur_ts = data->qm_timestep+data->num_frames_sent;
+  //
+  // /* store the SCF energies */
+  // for (i=0; i<cur_ts->num_scfiter; i++) {
+  //   qm_ts->scfenergies[i] = cur_ts->scfenergies[i];
+  // }
+  //
+  // /* store gradients */
+  // if (cur_ts->gradient) {
+  //   for (i=0; i<3*natoms; i++) {
+  //     qm_ts->gradient[i] = cur_ts->gradient[i];
+  //   }
+  // }
+  //
+  // /* store charge sets*/
+  if (cur_ts->have_mulliken) {
+    offset = num_charge_sets*data->numatoms;
+    for (i=0; i<data->numatoms; i++) {
+      qm_ts->charges[offset+i] = cur_ts->mulliken_charges[i];
+    }
+    qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_MULLIKEN;
+    num_charge_sets++;
+  }
+  //
+  // if (cur_ts->have_lowdin) {
+  //   offset = num_charge_sets*data->numatoms;
+  //   for (i=0; i<data->numatoms; i++) {
+  //     qm_ts->charges[offset+i] = cur_ts->lowdin_charges[i];
+  //   }
+  //   qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_LOWDIN;
+  //   num_charge_sets++;
+  // }
+  // if (cur_ts->have_esp) {
+  //   offset = num_charge_sets*data->numatoms;
+  //   for (i=0; i<data->numatoms; i++) {
+  //     qm_ts->charges[offset+i] = cur_ts->esp_charges[i];
+  //   }
+  //   qm_ts->charge_types[num_charge_sets] = MOLFILE_QMCHARGE_ESP;
+  //   num_charge_sets++;
+  // }
+  //
+  //
+  /* store the wave function and orbital energies */
+  if (cur_ts->wave) {
+    std::cout << "mopacplugin) Have wavefunctions: " << cur_ts->numwave << " in frame: " << data->num_frames_sent << std::endl;
+    for (i=0; i<cur_ts->numwave; i++) {
+      qm_wavefunction_t *wave = &cur_ts->wave[i];
+      qm_ts->wave[i].type         = wave->type;
+      qm_ts->wave[i].spin         = wave->spin;
+      qm_ts->wave[i].excitation   = wave->exci;
+      qm_ts->wave[i].multiplicity = wave->mult;
+      qm_ts->wave[i].energy       = wave->energy;
+      strncpy(qm_ts->wave[i].info, wave->info, MOLFILE_BUFSIZ);
+
+      if (wave->wave_coeffs) {
+        memcpy(qm_ts->wave[i].wave_coeffs, wave->wave_coeffs, wave->num_orbitals*data->wavef_size*sizeof(float));
+      }
+      if (wave->orb_energies) {
+        memcpy(qm_ts->wave[i].orbital_energies, wave->orb_energies,
+               wave->num_orbitals*sizeof(float));
+      }
+      if (wave->has_occup) {
+        memcpy(qm_ts->wave[i].occupancies, wave->orb_occupancies,
+               wave->num_orbitals*sizeof(float));
+      }
+    }
+  }
+  //
+  if (data->runtype == MOLFILE_RUNTYPE_ENERGY ||
+      data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+    /* We have only a single point */
+    data->trajectory_done = TRUE;
+  }
+
+  data->num_frames_sent++;
+
+  return MOLFILE_SUCCESS;
+}
+
+
+/***********************************************************
+ * Provide QM metadata for next timestep.
+ * This actually triggers reading the entire next timestep
+ * since we have to parse the whole timestep anyway in order
+ * to get the metadata. So we store the read data locally
+ * and hand them to VMD when requested by read_timestep().
+ *
+ ***********************************************************/
+static int read_qm_timestep_metadata(void *mydata,
+                                    molfile_qm_timestep_metadata_t *meta) {
+  int have = 0;
+
+  qmdata_t *data = (qmdata_t *)mydata;
+
+  meta->count = -1; /* Don't know the number of frames yet */
+
+  if (data->num_frames_read > data->num_frames_sent) {
+    have = 1;
+  }
+  else if (data->num_frames_read < data->num_frames) {
+    printf("mopacplugin) Probing timestep %d\n", data->num_frames_read);
+
+    have = get_traj_frame(data, data->atoms, data->numatoms);
+  }
+
+  if (have) {
+    // std::cout << "have frame" << std::endl;
+    int i;
+    qm_timestep_t *cur_ts;
+
+    /* get a pointer to the current qm timestep */
+    cur_ts = data->qm_timestep+data->num_frames_sent;
+
+    // std::cout << "numwave: " << cur_ts->numwave << std::endl;
+
+    for (i=0; (i<MOLFILE_MAXWAVEPERTS && i<cur_ts->numwave); i++) {
+      meta->num_orbitals_per_wavef[i] = cur_ts->wave[i].num_orbitals;
+      meta->has_occup_per_wavef[i]    = cur_ts->wave[i].has_occup;
+      meta->has_orben_per_wavef[i]    = cur_ts->wave[i].has_orben;
+      // std::cout << "occ: " << cur_ts->wave[i].has_occup << std::endl;
+      // std::cout << "energy: " << cur_ts->wave[i].has_orben << std::endl;
+    }
+    meta->wavef_size      = data->wavef_size;
+    meta->num_wavef       = cur_ts->numwave;
+    meta->num_scfiter     = cur_ts->num_scfiter;
+    meta->num_charge_sets = cur_ts->have_mulliken +
+      cur_ts->have_lowdin + cur_ts->have_esp;
+    if (cur_ts->gradient) meta->has_gradient = TRUE;
+
+  } else {
+    // std::cout << "not have frame" << std::endl;
+    meta->has_gradient = FALSE;
+    meta->num_scfiter  = 0;
+    meta->num_orbitals_per_wavef[0] = 0;
+    meta->has_occup_per_wavef[0] = FALSE;
+    meta->num_wavef = 0;
+    meta->wavef_size = 0;
+    meta->num_charge_sets = 0;
+    data->trajectory_done = TRUE;
+  }
+
+  return MOLFILE_SUCCESS;
+}
+
+
+#endif
+
+
+/******************************************************
+ *
+ * this function extracts the trajectory information
+ * from the output file
+ *
+ * *****************************************************/
+static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
+                          int natoms) {
+  mopacdata *mopac = (mopacdata *)data->format_specific_data;
+  qm_timestep_t *cur_ts;
+  char buffer[BUFSIZ];
+  char word[BUFSIZ];
+  int units;
+  buffer[0] = '\0';
+  word[0]   = '\0';
+
+  printf("mopacplugin) Timestep %d:\n", data->num_frames_read);
+  printf("mopacplugin) ============\n");
+
+  cur_ts = data->qm_timestep + data->num_frames_read;
+
+  // debugging the trajectory reading file positions
+  // printf("nfread: %d \n", data->num_frames_read);
+  if (!data->filepos_array) {
+    printf("filepos array empty!!!\n");
+    return FALSE;
+  }
+
+  fseek(data->file, data->filepos_array[data->num_frames_read], SEEK_SET);
+
+  /*
+  * distinguish between job types
+  * at the moment, only Single Points will work
+  * lines 2840 - 3122 in gamessplugin.c
+   */
+
+  // reading geometries...
+
+  if ((data->runtype == MOLFILE_RUNTYPE_OPTIMIZE || data->runtype == MOLFILE_RUNTYPE_GRADIENT) && data->num_frames > 1) {
+    if (goto_keyline(data->file, "CARTESIAN COORDINATES (ANGSTROEM)", NULL)) {
+      GET_LINE(buffer, data->file);
+      // thisline(data->file);
+      // UNITS ARE ANGSTROEM
+      // bohr = 0;
+      // sscanf()
+    } else {
+      printf("mopacplugin) No cartesian coordinates in ANGSTROEM found.\n");
+    }
+    // skip the ---- line
+    eatline(data->file, 1);
+    if (!get_coordinates(data->file, &data->atoms, units, &natoms)) {
+      printf("mopacplugin) Couldn't find coordinates for timestep %d\n", data->num_frames_read);
+    }
+  }
+
+  // if (get_scfdata(data, cur_ts) == FALSE) {
+  //   printf("mopacplugin) Couldn't find SCF iterations for timestep %d\n",
+  //          data->num_frames_read);
+  // }
+
+  /* Try reading canonical alpha/beta wavefunction */
+  // check_add_wavefunctions(data, cur_ts);
+
+  /* Read point charged */
+  // if (!cur_ts->have_mulliken && get_population(data, cur_ts)) {
+  //   printf("mopacplugin) Mulliken charges found\n");
+  // }
+
+  /* Read the energy gradients (= -forces on atoms) */
+  // if (get_gradient(data, cur_ts)) {
+  //   printf("mopacplugin) Energy gradient found.\n");
+  // }
+
+  /* If this is the last frame of the trajectory and the file
+   * wasn't truncated and the program didn't terminate
+   * abnormally then read the final wavefunction. */
+  if ((data->runtype == MOLFILE_RUNTYPE_OPTIMIZE ||
+       data->runtype == MOLFILE_RUNTYPE_SADPOINT) &&
+      (data->num_frames_read+1 == data->num_frames &&
+       (data->status == MOLFILE_QMSTATUS_UNKNOWN ||
+        data->status == MOLFILE_QMSTATUS_OPT_CONV ||
+        data->status == MOLFILE_QMSTATUS_OPT_NOT_CONV))) {
+
+    /* We need to jump over the end of the trajectory because
+     * this is also the keystring for get_wavefunction() to
+     * bail out. */
+    if (data->status == MOLFILE_QMSTATUS_OPT_CONV ||
+        data->status == MOLFILE_QMSTATUS_OPT_NOT_CONV) {
+      fseek(data->file, data->end_of_traj, SEEK_SET);
+      std::cout << "mopacplugin) Finished trajectory." << std::endl;
+    }
+
+    /* Try to read final wavefunction and orbital energies
+     * A preexisting canonical wavefunction for this timestep
+     * with the same characteristics (spin, exci, info) will
+     * be overwritten by the final wavefuntion if it has more
+     * orbitals. */
+    // check_add_wavefunctions(data, cur_ts);
+  }
+
+  data->num_frames_read++;
+  #ifdef DEBUGGING
+    std::cout << "mopacplugin) Frames read: " << data->num_frames_read << std::endl;
+  #endif
+
+  return TRUE;
+}
+
 
 /*************************************************************
  *
@@ -327,9 +798,9 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   // plugin.read_qm_rundata  = read_mopac_rundata;
 
 #if vmdplugin_ABIVERSION > 11
-  // plugin.read_timestep_metadata    = read_timestep_metadata;
-  // plugin.read_qm_timestep_metadata = read_qm_timestep_metadata;
-  // plugin.read_timestep = read_timestep;
+  plugin.read_timestep_metadata    = read_timestep_metadata;
+  plugin.read_qm_timestep_metadata = read_qm_timestep_metadata;
+  plugin.read_timestep = read_timestep;
 #endif
 
   return VMDPLUGIN_SUCCESS;
