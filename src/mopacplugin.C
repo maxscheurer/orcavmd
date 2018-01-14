@@ -506,7 +506,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     int atomIndex = 0;
     while(readingBlock) {
       GET_LINE(buffer, data->file);
-      numReadCoefficients = sscanf(buffer, "%s %s %s %f %f %f %f %f %f %f %f", &dumpBasisFunc, &dumpName, &atomIndex,
+      numReadCoefficients = sscanf(buffer, "%s %s %d %f %f %f %f %f %f %f %f", &dumpBasisFunc, &dumpName, &atomIndex,
       &coeff[0], &coeff[1], &coeff[2],&coeff[3], &coeff[4], &coeff[5], &coeff[6], &coeff[7]);
       // the coefficient number is the number of read elements minus 3 bc. of the atom and bf name
       coefficientNumber = (numReadCoefficients - 3);
