@@ -14,6 +14,7 @@ Authors: Maximilian Scheurer, Marcelo Melo, May 2017
 #include <algorithm>
 #include <string>
 #include <cctype>
+#include <sstream>
 #include "qmplugin.h"
 #include "unit_conversion.h"
 #include "periodic_table.h"
@@ -59,6 +60,63 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms, int natoms);
 static void close_mopac_read(void *mydata);
 static void print_input_data(qmdata_t *data);
 
+template<typename Out>
+void split(const std::string &s, char delim, Out result);
+
+
+template<typename Out>
+void split(const std::string &s, char delim, Out result) {
+    std::stringstream ss;
+    ss.str(s);
+    std::string item;
+    while (std::getline(ss, item, delim)) {
+        *(result++) = item;
+    }
+}
+
+std::vector<std::string> split(const std::string &s, char delim) {
+    std::vector<std::string> elems;
+    split(s, delim, std::back_inserter(elems));
+    return elems;
+}
+
+
+std::string trim(const std::string& str,
+                 const std::string& whitespace = " \t")
+{
+    const auto strBegin = str.find_first_not_of(whitespace);
+    if (strBegin == std::string::npos)
+        return ""; // no content
+
+    const auto strEnd = str.find_last_not_of(whitespace);
+    const auto strRange = strEnd - strBegin + 1;
+
+    return str.substr(strBegin, strRange);
+}
+
+std::string reduce(const std::string& str,
+                   const std::string& fill = " ",
+                   const std::string& whitespace = " \t\n")
+{
+    // trim first
+    auto result = trim(str, whitespace);
+
+    // replace sub ranges
+    auto beginSpace = result.find_first_of(whitespace);
+    while (beginSpace != std::string::npos)
+    {
+        const auto endSpace = result.find_first_not_of(whitespace, beginSpace);
+        const auto range = endSpace - beginSpace;
+
+        result.replace(beginSpace, range, fill);
+
+        const auto newStart = beginSpace + fill.length();
+        beginSpace = result.find_first_of(whitespace, newStart);
+    }
+
+    return result;
+}
+
 static int get_job_info(qmdata_t *data) {
   long filepos;
   char buffer[BUFSIZ];
@@ -72,6 +130,25 @@ static int get_job_info(qmdata_t *data) {
     printf("mopacplugin) MOPAC calculation did not succeed.\n");
     return FALSE;
   }
+  // go to top of file again and then to the info section
+  rewind(data->file);
+  goto_keyline(data->file, "CALCULATION DONE", NULL);
+  eatline(data->file, 1);
+
+	std::vector<std::string> inputFile;
+	int endOfInput = 0;
+	while(!endOfInput) {
+		GET_LINE(buffer, data->file);
+		std::string test(buffer);
+    int lineNumber = 0;
+    std::cout << test << std::endl;
+		if (lineNumber == 1) {
+		}
+		if (test.find("********************************") !=std::string::npos) {
+			endOfInput = 1;
+		}
+	}
+
   data->runtype = MOLFILE_RUNTYPE_ENERGY;
 
   return TRUE;
@@ -822,7 +899,6 @@ VMDPLUGIN_API int VMDPLUGIN_fini(void) {
  * close file and free memory
  *
  **********************************************************/
- // move to top later...
 static void close_mopac_read(void *mydata) {
   printf("Freeing memory.\n");
 

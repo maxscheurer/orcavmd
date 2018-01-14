@@ -16,6 +16,7 @@ Inspired from gamessplugin.c
 #include <algorithm>
 #include <string>
 #include <cctype>
+#include <sstream>
 #include "qmplugin.h"
 #include "unit_conversion.h"
 #include "periodic_table.h"
