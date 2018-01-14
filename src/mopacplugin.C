@@ -46,6 +46,8 @@ typedef struct {
   int version;
 } mopacdata;
 
+typedef std::vector<std::vector<std::vector<float>>> MoCoeff;
+
 // Checks if loaded file is really an Mopac output file
 static int have_mopac(qmdata_t *data, mopacdata* mopac);
 static int parse_static_data(qmdata_t *data, int* natoms);
@@ -53,6 +55,8 @@ static void* open_mopac_read(const char* filename, const char* filetype, int *na
 static int get_job_info(qmdata_t *data);
 static int get_input_structure(qmdata_t *data, mopacdata *mopac);
 static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit, int *numatoms);
+static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t *wf);
+static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts);
 static int analyze_traj(qmdata_t *data, mopacdata *mopac);
 
 static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms, int natoms);
@@ -143,10 +147,8 @@ static int get_job_info(qmdata_t *data) {
     const std::string test(buffer);
     int lineNumber = 0;
     const std::vector<std::string> jobInfos = split(reduce(test), ' ');
-    std::cout << test << std::endl;
     if (test.find("********") != std::string::npos) {
 		  endOfInput = 1;
-      std::cout << "job info inside done" << std::endl;
       break;
     }
     if (jobInfos.size() > 1) {
@@ -278,6 +280,360 @@ static int get_input_structure(qmdata_t *data, mopacdata *mopac) {
   return TRUE;
 }
 
+
+static int check_add_wavefunctions(qmdata_t *data, qm_timestep_t *ts) {
+  qm_wavefunction_t *wavef;
+  int i, n=1;
+
+  if (data->scftype==MOLFILE_SCFTYPE_UHF ||
+      data->scftype==MOLFILE_SCFTYPE_GVB ||
+      data->scftype==MOLFILE_SCFTYPE_MCSCF) {
+    /* Try to read second wavefunction, e.g. spin beta */
+    n = 2;
+  }
+
+  for (i=0; i<n; i++) {
+    /* Allocate memory for new wavefunction */
+    wavef = add_wavefunction(ts);
+
+    /* Try to read wavefunction and orbital energies */
+    if (get_wavefunction(data, ts, wavef) == FALSE) {
+      /* Free the last wavefunction again. */
+      del_wavefunction(ts);
+#ifdef DEBUGGING_ORCA
+      printf("mopacplugin) No canonical wavefunction present for timestep %d\n", data->num_frames_read);
+#endif
+      break;
+
+    } else {
+      char action[32];
+      char spinstr[32];
+      strcpy(spinstr, "");
+      if (data->scftype==MOLFILE_SCFTYPE_UHF) {
+        if (wavef->spin==SPIN_BETA) {
+          strcat(spinstr, "spin  beta, ");
+        } else {
+          strcat(spinstr, "spin alpha, ");
+        }
+      }
+
+      /* The last SCF energy is the energy of this electronic state */
+      if (ts->scfenergies) {
+        wavef->energy = ts->scfenergies[ts->num_scfiter-1];
+      } else {
+        wavef->energy = 0.f;
+      }
+
+      /* Multiplicity */
+      wavef->mult = data->multiplicity;
+
+
+      /* String telling wether wavefunction was added, updated
+       * or ignored. */
+      strcpy(action, "added");
+
+      /* If there exists a canonical wavefunction of the same spin
+       * we'll replace it */
+      if (ts->numwave>1 && wavef->type==MOLFILE_WAVE_CANON) {
+        int i, found =-1;
+        for (i=0; i<ts->numwave-1; i++) {
+          if (ts->wave[i].type==wavef->type &&
+              ts->wave[i].spin==wavef->spin &&
+              ts->wave[i].exci==wavef->exci &&
+              !strncmp(ts->wave[i].info, wavef->info, MOLFILE_BUFSIZ)) {
+            found = i;
+            break;
+          }
+        }
+        if (found>=0) {
+          /* If the new wavefunction has more orbitals we
+           * replace the old one for this step. */
+          if (wavef->num_orbitals >
+              ts->wave[found].num_orbitals) {
+            /* Replace existing wavefunction for this step */
+            replace_wavefunction(ts, found);
+            sprintf(action, "%d updated", found);
+          } else {
+            /* Delete last wavefunction again */
+            del_wavefunction(ts);
+            sprintf(action, "matching %d ignored", found);
+          }
+          wavef = &ts->wave[ts->numwave-1];
+        }
+      }
+
+      printf("orcaplugin) Wavefunction %s (%s):\n", action, wavef->info);
+      printf("orcaplugin)   %d orbitals, %sexcitation %d, multiplicity %d\n",
+             wavef->num_orbitals, spinstr, wavef->exci, wavef->mult);
+    }
+  }
+
+  return i;
+}
+
+
+static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t *wf) {
+  std::vector<float> orbitalEnergies;
+  std::vector<int> orbitalOccupancies;
+  std::vector<float> wavefunctionCoeffs;
+  int num_orbitals = 0;
+
+  char buffer[BUFSIZ];
+  char word[8][BUFSIZ];
+  long filepos;
+  char *line;
+
+  buffer[0] = '\0';
+  int i = 0;
+  for (i=0; i<8; i++) word[i][0] = '\0';
+
+  if (wf == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  wf->has_occup = FALSE;
+  wf->has_orben = FALSE;
+  wf->type = MOLFILE_WAVE_UNKNOWN;
+  wf->spin = SPIN_ALPHA;
+  wf->exci = 0;
+  strncpy(wf->info, "unknown", MOLFILE_BUFSIZ);
+
+  filepos = ftell(data->file);
+
+  do {
+    GET_LINE(buffer, data->file);
+    line = trimleft(trimright(buffer));
+    if(!strcmp(line, "Occupied Orbitals")) {
+      wf->type = MOLFILE_WAVE_CANON;
+      strncpy(wf->info, "canonical", MOLFILE_BUFSIZ);
+    }
+  } while(wf->type == MOLFILE_WAVE_UNKNOWN && strcmp(line, "== MOPAC DONE =="));
+
+  if(wf->type == MOLFILE_WAVE_UNKNOWN) {
+    #ifdef DEBUGGING_ORCA
+        printf("mopacplugin) get_wavefunction(): No wavefunction found!\n");
+    #endif
+        fseek(data->file, filepos, SEEK_SET);
+        return FALSE;
+  } else {
+    #ifdef DEBUGGING_ORCA
+      printf("mopacplugin) Found wavefunction of type %d.\n", wf->type);
+    #endif
+  }
+
+  eatline(data->file, 3);
+
+  // number of read values from line;
+  int numReadOrbitalIndices = 0;
+  int numReadEnergies = 0;
+  int numReadOccupancies = 0;
+  int numReadCoefficients = 0;
+  float numberOfElectrons = 0;
+  float occupiedOrbitals = 0;
+  std::vector<int> numberContractedBf;
+  std::vector<int> wfAngMoment;
+  std::vector<std::string> orbitalNames;
+  MoCoeff allCoefficients;
+
+  // orbital indices
+  int n[8];
+  int wavefunctionRead = 0;
+  int firstRead = 1;
+  int haveAngMom = 0;
+  while(!wavefunctionRead) {
+    float coeff[8], energies[8];
+    float occ[8];
+    char dumpName[BUFSIZ];
+    char dumpBasisFunc[BUFSIZ];
+    filepos = ftell(data->file);
+
+    // reads the orbital indices
+    if (firstRead == 1) {
+      GET_LINE(buffer, data->file);
+      firstRead++;
+    }
+    numReadOrbitalIndices = sscanf(buffer, "%s %s %d %d %d %d %d %d %d %d", &dumpName, &dumpBasisFunc, &n[0], &n[1], &n[2], &n[3], &n[4], &n[5], &n[6], &n[7]);
+    if (!numReadOrbitalIndices || numReadOrbitalIndices == -1) {
+      /* If there are no orbital indexes then this must be the
+       * end of the wavefunction coefficient table. */
+      fseek(data->file, filepos, SEEK_SET);
+      wavefunctionRead = 1;
+      break;
+    }
+    eatline(data->file, 1);
+    numReadOrbitalIndices -= 2; // because of the "Root No." string in the beginning
+
+    // reads the orbital energies
+    GET_LINE(buffer, data->file);
+    numReadEnergies = sscanf(buffer, "%f %f %f %f %f %f %f %f", &energies[0], &energies[1], &energies[2],
+     &energies[3], &energies[4], &energies[5], &energies[6], &energies[7]);
+    if (numReadEnergies != numReadOrbitalIndices) {
+      printf("mopacplugin) Molecular Orbital section corrupted! energies.\n");
+      break;
+    }
+
+    // store the energies in vector
+    if (numReadEnergies != -1) {
+      for (size_t c = 0; c < numReadEnergies; c++) {
+        orbitalEnergies.push_back(energies[c]);
+        std::cout << "Energy: " <<energies[c]<< std::endl;
+        num_orbitals++;
+      }
+    }
+
+    // stores the occupancies in vector
+    // if(numReadOccupancies) {
+    //   for (size_t c = 0; c < numReadOccupancies; c++) {
+    //     orbitalOccupancies.push_back((int)occ[c]);
+    //     // std::cout << "Occupancy: " << occ[c] << std::endl;
+	  //    numberOfElectrons += occ[c];
+	  //    if (occ[c]) {
+	  //      occupiedOrbitals++;
+	  //    }
+    //   }
+    //   num_orbitals += numReadOccupancies;
+    // }
+
+    // skip --- line
+    eatline(data->file, 2);
+
+    std::vector<std::vector<float>> moCoefficients;
+    // we expect as many coefficients as numReadOccupancies, numReadEnergies, numReadOrbitalIndices!
+    // read them as long as we find new coefficients
+    int readingBlock = 1;
+    int coefficientNumber = 0;
+    int atomIndex = 0;
+    while(readingBlock) {
+      GET_LINE(buffer, data->file);
+      numReadCoefficients = sscanf(buffer, "%s %s %s %f %f %f %f %f %f %f %f", &dumpBasisFunc, &dumpName, &atomIndex,
+      &coeff[0], &coeff[1], &coeff[2],&coeff[3], &coeff[4], &coeff[5], &coeff[6], &coeff[7]);
+      // the coefficient number is the number of read elements minus 3 bc. of the atom and bf name
+      coefficientNumber = (numReadCoefficients - 3);
+      if (coefficientNumber == numReadOrbitalIndices) {
+        // std::cout << "found coeffs: " << dumpName << "," << dumpBasisFunc << std::endl;
+        if (firstRead == 2 && !haveAngMom) {
+          std::string bfn = dumpBasisFunc;
+          std::size_t found = bfn.find_first_not_of("-0123456789 ");
+          if (found!=std::string::npos) {
+            std::string orbital =  bfn.substr(found);
+            orbitalNames.push_back(orbital);
+            // std::cout << orbital << std::endl;
+          } else {
+            printf("orcaplugin) Could not determine orbital description.\n");
+            return FALSE;
+          }
+        }
+        // reading coefficients
+        std::vector<float> currentMoCoeffs;
+        for (size_t cidx = 0; cidx < coefficientNumber; cidx++) {
+          currentMoCoeffs.push_back(coeff[cidx]);
+          // std::cout << coeff[cidx] << std::endl;
+        }
+        moCoefficients.push_back(currentMoCoeffs);
+      } else {
+        // block seems to be finished
+        readingBlock = 0;
+        haveAngMom = 1;
+        eatline(data->file, 1);
+        GET_LINE(buffer, data->file);
+      }
+    }
+    allCoefficients.push_back(moCoefficients);
+  }
+  printf("%d\n", num_orbitals);
+
+  // assign the number of contracted functions to wavefunction size
+  data->wavef_size = numberContractedBf[0];
+  wf->num_orbitals  = num_orbitals;
+  wf->orb_energies = (float *) calloc(num_orbitals, sizeof(float));
+  wf->orb_occupancies = (float *) calloc(num_orbitals, sizeof(float));
+  wf->wave_coeffs = (float *) calloc(num_orbitals * data->wavef_size, sizeof(float));
+  wf->has_occup = TRUE;
+  wf->has_orben = TRUE;
+
+  int cnt = 0;
+  for (auto en : orbitalEnergies) {
+    wf->orb_energies[cnt] = en;
+    cnt++;
+  }
+  cnt = 0;
+  for (auto occ : orbitalOccupancies) {
+    wf->orb_occupancies[cnt] = occ;
+    cnt++;
+  }
+
+  int rowIndex = 0, columnIndex = 0;
+  int blockIdx = 0;
+  int moBlockSize = 0;
+  int moBlockIdx = 0;
+  for (auto moBlock : allCoefficients) {
+    for (auto moRow : moBlock) {
+      // std::cout << rowIndex << std::endl;
+      for (auto moCo : moRow) {
+        if ((columnIndex * data->wavef_size + rowIndex) > num_orbitals * data->wavef_size) {
+          std::cout << "something went wrong:" << columnIndex << std::endl;
+          std::cout << "something went wrong:" << (columnIndex * data->wavef_size + rowIndex) << " vs. " << num_orbitals * data->wavef_size << std::endl;
+          return FALSE;
+        }
+        // std::cout << orbitalNames[rowIndex] << std::endl;
+        wf->wave_coeffs[columnIndex * data->wavef_size + rowIndex] = moCo;
+        columnIndex++;
+      }
+      columnIndex = moBlockSize;
+      rowIndex++;
+    }
+    rowIndex = 0;
+    // 0-based!!!
+    moBlockSize += moBlock[moBlockIdx].size();
+    columnIndex = moBlockSize;
+    moBlockIdx++;
+    // std::cout << "bs: " << moBlockSize << std::endl;
+  }
+
+  // LOGGING for MO coefficients
+  /*
+  float coeff2 = 0;
+  for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
+    if (t % data->wavef_size == 0) {
+      std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
+      coeff2 = 0;
+    }
+    coeff2 += wf->wave_coeffs[t]*wf->wave_coeffs[t];
+    std::cout << wf->wave_coeffs[t] << std::endl;
+  }
+  */
+
+  if (data->num_frames_read < 1) {
+    data->angular_momentum = (int*)calloc(wfAngMoment.size(), sizeof(int));
+  }
+
+  // std::cout << "wfang: " << wfAngMoment.size() <<  " " << 3*data->wavef_size <<std::endl;
+  for (size_t ang = 0; ang < wfAngMoment.size(); ang++) {
+    data->angular_momentum[ang] = wfAngMoment[ang];
+  }
+
+  // TODO: This is just a workaround and might give wrong
+  // results when reading unrestricted jobs
+  data->num_occupied_A = occupiedOrbitals;
+  data->num_occupied_B = occupiedOrbitals;
+  // data->num_electrons = numberOfElectrons;
+
+  // if (data->num_electrons != numberOfElectrons) {
+  //
+  // }
+
+  std::cout << "----------------------------------------" << std::endl;
+  std::cout << "Total number of orbitals: " << num_orbitals << std::endl;
+  std::cout << "Number of electrons in read wf: " << numberOfElectrons<< std::endl;
+  std::cout << "Number of occupied orbitals: " << occupiedOrbitals << std::endl;
+  std::cout << "Number of contracted bf: " << numberContractedBf[0] << std::endl;
+  std::cout << "----------------------------------------" << std::endl;
+
+  return TRUE;
+}
+
+
 /* Read the first trajectory frame. */
 static int read_first_frame(qmdata_t *data) {
   /* Try reading the first frame.
@@ -293,10 +649,7 @@ static int read_first_frame(qmdata_t *data) {
 
 static int parse_static_data(qmdata_t *data, int* natoms) {
   mopacdata *mopac = (mopacdata *)data->format_specific_data;
-  std::cout << "parse static data" << std::endl;
   if (!get_job_info(data)) return FALSE;
-  std::cout << "job info done" << std::endl;
-
 
   if (!get_input_structure(data, mopac)) return FALSE;
 
@@ -310,7 +663,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  print_input_data(data);
+  // print_input_data(data);
   std::cout << data->runtype << std::endl;
 
   return TRUE;
@@ -809,7 +1162,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms,
   // }
 
   /* Try reading canonical alpha/beta wavefunction */
-  // check_add_wavefunctions(data, cur_ts);
+  check_add_wavefunctions(data, cur_ts);
 
   /* Read point charged */
   // if (!cur_ts->have_mulliken && get_population(data, cur_ts)) {
