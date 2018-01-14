@@ -136,24 +136,26 @@ static int get_job_info(qmdata_t *data) {
   goto_keyline(data->file, "CALCULATION DONE", NULL);
   eatline(data->file, 1);
 
-	std::vector<std::string> inputFile;
-	int endOfInput = 0;
-	while(!endOfInput) {
-		GET_LINE(buffer, data->file);
-		std::string test(buffer);
+  std::vector<std::string> inputFile;
+  int endOfInput = 0;
+  while(!endOfInput) {
+    GET_LINE(buffer, data->file);
+    const std::string test(buffer);
     int lineNumber = 0;
-    std::vector<std::string> jobInfos = split(reduce(test), ' ');
-
-    std::string kw = jobInfos[1];
-		if (test.find("********************************") !=std::string::npos) {
-			endOfInput = 1;
+    const std::vector<std::string> jobInfos = split(reduce(test), ' ');
+    std::cout << test << std::endl;
+    if (test.find("********") != std::string::npos) {
+		  endOfInput = 1;
+      std::cout << "job info inside done" << std::endl;
       break;
-		}
-    if (kw.compare("QMMM")) {
-      data->runtype = MOLFILE_RUNTYPE_GRADIENT;
+    }
+    if (jobInfos.size() > 1) {
+      const std::string kw = jobInfos[1];
+      if (kw.compare("QMMM")) {
+        data->runtype = MOLFILE_RUNTYPE_GRADIENT;
+      }
     }
 	}
-
   return TRUE;
 }
 
@@ -291,7 +293,10 @@ static int read_first_frame(qmdata_t *data) {
 
 static int parse_static_data(qmdata_t *data, int* natoms) {
   mopacdata *mopac = (mopacdata *)data->format_specific_data;
+  std::cout << "parse static data" << std::endl;
   if (!get_job_info(data)) return FALSE;
+  std::cout << "job info done" << std::endl;
+
 
   if (!get_input_structure(data, mopac)) return FALSE;
 
@@ -305,7 +310,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  // print_input_data(data);
+  print_input_data(data);
   std::cout << data->runtype << std::endl;
 
   return TRUE;
