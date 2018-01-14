@@ -130,6 +130,7 @@ static int get_job_info(qmdata_t *data) {
     printf("mopacplugin) MOPAC calculation did not succeed.\n");
     return FALSE;
   }
+  data->runtype = MOLFILE_RUNTYPE_ENERGY;
   // go to top of file again and then to the info section
   rewind(data->file);
   goto_keyline(data->file, "CALCULATION DONE", NULL);
@@ -141,15 +142,17 @@ static int get_job_info(qmdata_t *data) {
 		GET_LINE(buffer, data->file);
 		std::string test(buffer);
     int lineNumber = 0;
-    std::cout << test << std::endl;
-		if (lineNumber == 1) {
-		}
+    std::vector<std::string> jobInfos = split(reduce(test), ' ');
+
+    std::string kw = jobInfos[1];
 		if (test.find("********************************") !=std::string::npos) {
 			endOfInput = 1;
+      break;
 		}
+    if (kw.compare("QMMM")) {
+      data->runtype = MOLFILE_RUNTYPE_GRADIENT;
+    }
 	}
-
-  data->runtype = MOLFILE_RUNTYPE_ENERGY;
 
   return TRUE;
 }
@@ -212,7 +215,7 @@ static int get_coordinates(FILE *file, qm_atom_t **atoms, int unit,
 
     strncpy(atm->type, atname, sizeof(atm->type));
     atm->atomicnum = floor(atomicnum+0.5); /* nuclear charge */
-    printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
+    // printf("coor: %s %d %f %f %f\n", atm->type, atm->atomicnum, x, y, z);
 
     /* if coordinates are in Bohr convert them to Angstrom */
     if (unit==BOHR) {
@@ -303,6 +306,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
   read_first_frame(data);
 
   // print_input_data(data);
+  std::cout << data->runtype << std::endl;
 
   return TRUE;
 }
@@ -351,7 +355,7 @@ static int analyze_traj(qmdata_t *data, mopacdata *mopac) {
   } else if (data->runtype == MOLFILE_RUNTYPE_GRADIENT) {
     int appendedCalculations = 0;
     rewind(data->file);
-    pass_keyline(data->file, "Energy+Gradient Calculation", NULL); // TODO: adapt
+    pass_keyline(data->file, "FINAL HEAT OF FORMATION", NULL); // TODO: adapt
     data->filepos_array[0] = ftell(data->file);
     data->num_frames = 1;
 
@@ -360,7 +364,7 @@ static int analyze_traj(qmdata_t *data, mopacdata *mopac) {
       line = trimleft(buffer);
 
       std::string l(line);
-      if (l.find("Energy+Gradient Calculation") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_GRADIENT) {
+      if (l.find("FINAL HEAT OF FORMATION") != std::string::npos && data->runtype==MOLFILE_RUNTYPE_GRADIENT) {
         appendedCalculations++;
         // std::cout << l << std::endl;
         if (data->num_frames > 0) {
@@ -373,7 +377,7 @@ static int analyze_traj(qmdata_t *data, mopacdata *mopac) {
 
     if (appendedCalculations) {
       std::cout << "mopacplugin) Found multiple appended gradient calculations: " << data->num_frames << std::endl;
-      pass_keyline(data->file, "FINAL SINGLE POINT ENERGY", NULL);
+      pass_keyline(data->file, "== MOPAC DONE ==", NULL);
       data->end_of_traj = ftell(data->file);
       fseek(data->file, filepos, SEEK_SET);
 
@@ -382,7 +386,7 @@ static int analyze_traj(qmdata_t *data, mopacdata *mopac) {
       memset(data->qm_timestep, 0, data->num_frames*sizeof(qm_timestep_t));
     } else {
       data->num_frames = 1;
-      pass_keyline(data->file, "FINAL SINGLE POINT ENERGY", NULL);
+      pass_keyline(data->file, "== MOPAC DONE ==", NULL);
       data->end_of_traj = ftell(data->file);
 
       /* Allocate memory for the frame */
@@ -392,9 +396,8 @@ static int analyze_traj(qmdata_t *data, mopacdata *mopac) {
     return TRUE;
   }
   else if (data->runtype == MOLFILE_RUNTYPE_OPTIMIZE) {
-    std::cout << "mopacplugin) Reading trajectory of optimization." << std::endl;
-    rewind(data->file);
-    goto_keyline(data->file, "Geometry Optimization Run", NULL);
+    std::cout << "mopacplugin) Reading trajectory of optimization not supported at the moment." << std::endl;
+    return FALSE;
   }
   else {
     std::cout << "mopacplugin) Jobtype not supported for trajectory reading." << std::endl;
@@ -532,9 +535,9 @@ static int read_mopac_structure(void *mydata, int *optflags, molfile_atom_t *ato
     atom->chain[0] = '\0';
     atom->segid[0] = '\0';
     atom->atomicnumber = cur_atom->atomicnum;
-    #ifdef DEBUGGING
-    printf("mopacplugin) atomicnum[%d] = %d\n", i, atom->atomicnumber);
-    #endif
+    // #ifdef DEBUGGING
+    // printf("mopacplugin) atomicnum[%d] = %d\n", i, atom->atomicnumber);
+    // #endif
 
     /* if (data->have_mulliken)
     atom->charge = data->qm_timestep->mulliken_charges[i];
