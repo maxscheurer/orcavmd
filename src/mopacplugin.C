@@ -63,6 +63,7 @@ static int get_traj_frame(qmdata_t *data, qm_atom_t *atoms, int natoms);
 
 static void close_mopac_read(void *mydata);
 static void print_input_data(qmdata_t *data);
+static int get_basis_for_element(std::string element, shell_t* shells);
 
 template<typename Out>
 void split(const std::string &s, char delim, Out result);
@@ -520,7 +521,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
             orbitalNames.push_back(orbital);
             // std::cout << orbital << std::endl;
           } else {
-            printf("orcaplugin) Could not determine orbital description.\n");
+            printf("mopacplugin) Could not determine orbital description.\n");
             return FALSE;
           }
         }
@@ -633,6 +634,24 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   return TRUE;
 }
 
+static int get_basis_for_element(std::string element, shell_t* shells) {
+  int shell_counter = 0;
+  
+  // shells = (shell_t*)realloc(shell_counter,sizeof(shell_t));
+}
+
+static int get_basis(qmdata_t *data) {
+  data->basis_set = (basis_atom_t*)calloc(data->numatoms, sizeof(basis_atom_t));
+  for (size_t atom = 0; atom < data->numatoms; atom++) {
+    std::string el(data->atoms[atom].type);
+    std::cout << "Atom " << atom << " : " << el << std::endl;
+    shell_t* tempShell = (shell_t*)calloc(1,sizeof(shell_t));
+    get_basis_for_element(el, tempShell);
+    free(tempShell);
+  }
+  return FALSE;
+}
+
 
 /* Read the first trajectory frame. */
 static int read_first_frame(qmdata_t *data) {
@@ -653,7 +672,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   if (!get_input_structure(data, mopac)) return FALSE;
 
-  // if (!get_basis(data)) return FALSE;
+  if (!get_basis(data)) return FALSE;
 
   if (!analyze_traj(data, mopac)) {
     printf("mopacplugin) WARNING: Truncated or abnormally terminated file!\n\n");
