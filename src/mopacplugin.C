@@ -66,6 +66,10 @@ static void close_mopac_read(void *mydata);
 static void print_input_data(qmdata_t *data);
 static int get_basis_for_element(std::string element, shell_t* shells);
 
+static int read_mopac_rundata(void *mydata, molfile_qm_t *qm_data);
+static int read_mopac_metadata(void *mydata, molfile_qm_metadata_t *metadata);
+
+
 template<typename Out>
 void split(const std::string &s, char delim, Out result);
 
@@ -830,7 +834,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  // print_input_data(data);
+  print_input_data(data);
   std::cout << data->runtype << std::endl;
 
   return TRUE;
@@ -1393,6 +1397,7 @@ static molfile_plugin_t plugin;
 VMDPLUGIN_API int VMDPLUGIN_init(void) {
   memset(&plugin, 0, sizeof(molfile_plugin_t));
   plugin.abiversion = vmdplugin_ABIVERSION;
+  std::cout << plugin.abiversion << std::endl;
   plugin.type = MOLFILE_PLUGIN_TYPE;
   plugin.name = "mopac";
   plugin.prettyname = "Mopac";
@@ -1405,8 +1410,8 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.read_structure = read_mopac_structure;
   plugin.close_file_read = close_mopac_read;
   //
-  // plugin.read_qm_metadata = read_mopac_metadata;
-  // plugin.read_qm_rundata  = read_mopac_rundata;
+  plugin.read_qm_metadata = read_mopac_metadata;
+  plugin.read_qm_rundata  = read_mopac_rundata;
 
 #if vmdplugin_ABIVERSION > 11
   plugin.read_timestep_metadata    = read_timestep_metadata;
@@ -1427,6 +1432,160 @@ VMDPLUGIN_API int VMDPLUGIN_fini(void) {
 }
 
 
+/*****************************************************
+ *
+ * provide VMD with the sizes of the QM related
+ * data structure arrays that need to be made
+ * available
+ *
+ *****************************************************/
+static int read_mopac_metadata(void *mydata,
+    molfile_qm_metadata_t *metadata) {
+
+  qmdata_t *data = (qmdata_t *)mydata;
+
+  if (data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+    metadata->ncart = (3*data->numatoms);
+    metadata->nimag = data->nimag;
+
+    if (data->have_internals) {
+      metadata->nintcoords = data->nintcoords;
+    } else {
+      metadata->nintcoords = 0;
+    }
+  }
+  else {
+    metadata->ncart = 0;
+    metadata->nimag = 0;
+    metadata->nintcoords = 0;
+  }
+
+  /* orbital data */
+  metadata->num_basis_funcs = data->num_basis_funcs;
+  metadata->num_basis_atoms = data->num_basis_atoms;
+  metadata->num_shells      = data->num_shells;
+  metadata->wavef_size      = data->wavef_size;
+
+#if vmdplugin_ABIVERSION > 11
+  /* system and run info */
+  metadata->have_sysinfo = 1;
+
+  /* hessian info */
+  metadata->have_carthessian = data->have_cart_hessian;
+  metadata->have_inthessian  = data->have_int_hessian;
+
+  /* normal mode info */
+  metadata->have_normalmodes = data->have_normal_modes;
+#endif
+
+  return MOLFILE_SUCCESS;
+}
+
+
+/******************************************************
+ *
+ * Provide VMD with the static (i.e. non-trajectory)
+ * data. That means we are filling the molfile_plugin
+ * data structures.
+ *
+ ******************************************************/
+static int read_mopac_rundata(void *mydata,
+                               molfile_qm_t *qm_data) {
+
+  qmdata_t *data = (qmdata_t *)mydata;
+  int i, j;
+  int ncart;
+  molfile_qm_hessian_t *hessian_data = &qm_data->hess;
+  molfile_qm_basis_t   *basis_data   = &qm_data->basis;
+  molfile_qm_sysinfo_t *sys_data     = &qm_data->run;
+
+  /* fill in molfile_qm_hessian_t */
+  if (data->runtype == MOLFILE_RUNTYPE_HESSIAN) {
+    ncart = 3*data->numatoms;
+
+    /* Hessian matrix in cartesian coordinates */
+    if (data->have_cart_hessian) {
+      for (i=0; i<ncart; i++) {
+        for (j=0; j<=i; j++) {
+          hessian_data->carthessian[ncart*i+j] = data->carthessian[ncart*i+j];
+          hessian_data->carthessian[ncart*j+i] = data->carthessian[ncart*i+j];
+        }
+      }
+    }
+
+    /* Hessian matrix in internal coordinates */
+    if (data->have_int_hessian) {
+      for (i=0; i<(data->nintcoords)*(data->nintcoords); i++) {
+        hessian_data->inthessian[i] = data->inthessian[i];
+      }
+    }
+
+    /* wavenumbers, intensities, normal modes */
+    if (data->have_normal_modes) {
+      for (i=0; i<ncart*ncart; i++) {
+        hessian_data->normalmodes[i] = data->normal_modes[i];
+      }
+      for (i=0; i<ncart; i++) {
+        hessian_data->wavenumbers[i] = data->wavenumbers[i];
+        hessian_data->intensities[i] = data->intensities[i];
+      }
+    }
+
+    /* imaginary modes */
+    for (i=0; i<data->nimag; i++) {
+      /*printf("imag_modes[%d]=%d\n", i, data->imag_modes[i]);*/
+      hessian_data->imag_modes[i] = data->imag_modes[i];
+    }
+  }
+
+  /* fill in molfile_qm_sysinfo_t */
+  sys_data->runtype = data->runtype;
+  sys_data->scftype = data->scftype;
+  sys_data->nproc   = data->nproc;
+  sys_data->num_electrons  = data->num_electrons;
+  sys_data->totalcharge    = data->totalcharge;
+  sys_data->num_occupied_A = data->num_occupied_A;
+  sys_data->num_occupied_B = data->num_occupied_B;
+  sys_data->status         = data->status;
+
+
+  strncpy(sys_data->basis_string, data->basis_string,
+          sizeof(sys_data->basis_string));
+
+  sys_data->memory = 0; /* XXX fixme */
+
+  strncpy(sys_data->runtitle, data->runtitle, sizeof(sys_data->runtitle));
+  strncpy(sys_data->geometry, data->geometry, sizeof(sys_data->geometry));
+  strncpy(sys_data->version_string, data->version_string,
+          sizeof(sys_data->version_string));
+
+#if vmdplugin_ABIVERSION > 11
+  /* fill in molfile_qm_basis_t */
+  if (data->num_basis_funcs) {
+    for (i=0; i<data->num_basis_atoms; i++) {
+      basis_data->num_shells_per_atom[i] = data->num_shells_per_atom[i];
+      basis_data->atomic_number[i] = data->atomicnum_per_basisatom[i];
+    }
+
+    for (i=0; i<data->num_shells; i++) {
+      basis_data->num_prim_per_shell[i] = data->num_prim_per_shell[i];
+      basis_data->shell_types[i] = data->shell_types[i];
+    }
+
+    for (i=0; i<2*data->num_basis_funcs; i++) {
+      basis_data->basis[i] = data->basis[i];
+    }
+
+    for (i=0; i<3*data->wavef_size; i++) {
+      basis_data->angular_momentum[i] = data->angular_momentum[i];
+    }
+    // std::cout << "free data->angular_momentum" << std::endl;
+    // free(data->angular_momentum);
+  }
+#endif
+
+  return MOLFILE_SUCCESS;
+}
 
 /**********************************************************
  *
