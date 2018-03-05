@@ -1405,7 +1405,7 @@ VMDPLUGIN_API int VMDPLUGIN_init(void) {
   plugin.read_structure = read_mopac_structure;
   plugin.close_file_read = close_mopac_read;
   //
-  plugin.read_qm_metadata = read_mopac_metadata;
+  // plugin.read_qm_metadata = read_mopac_metadata;
   // plugin.read_qm_rundata  = read_mopac_rundata;
 
 #if vmdplugin_ABIVERSION > 11
