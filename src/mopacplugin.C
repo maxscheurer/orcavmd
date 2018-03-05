@@ -18,6 +18,7 @@ Authors: Maximilian Scheurer, Marcelo Melo, May 2017
 #include "qmplugin.h"
 #include "unit_conversion.h"
 #include "periodic_table.h"
+#include "stofit.h"
 
 
 #define DEBUGGING 1
@@ -159,6 +160,7 @@ static int get_job_info(qmdata_t *data) {
       }
     }
 	}
+  data->multiplicity = 1;
   return TRUE;
 }
 
@@ -480,21 +482,13 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         orbitalEnergies.push_back(energies[c]);
         std::cout << "Energy: " <<energies[c]<< std::endl;
         num_orbitals++;
+
+        orbitalOccupancies.push_back(2);
+        // std::cout << "Occupancy: " << occ[c] << std::endl;
+	      numberOfElectrons += 2;
+	      occupiedOrbitals++;
       }
     }
-
-    // stores the occupancies in vector
-    // if(numReadOccupancies) {
-    //   for (size_t c = 0; c < numReadOccupancies; c++) {
-    //     orbitalOccupancies.push_back((int)occ[c]);
-    //     // std::cout << "Occupancy: " << occ[c] << std::endl;
-	  //    numberOfElectrons += occ[c];
-	  //    if (occ[c]) {
-	  //      occupiedOrbitals++;
-	  //    }
-    //   }
-    //   num_orbitals += numReadOccupancies;
-    // }
 
     // skip --- line
     eatline(data->file, 2);
@@ -505,6 +499,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     int readingBlock = 1;
     int coefficientNumber = 0;
     int atomIndex = 0;
+    int blockNumberOfContracted = 0;
     while(readingBlock) {
       GET_LINE(buffer, data->file);
       numReadCoefficients = sscanf(buffer, "%s %s %d %f %f %f %f %f %f %f %f", &dumpBasisFunc, &dumpName, &atomIndex,
@@ -538,11 +533,22 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         haveAngMom = 1;
         eatline(data->file, 1);
         GET_LINE(buffer, data->file);
+        blockNumberOfContracted++;
+        numberContractedBf.push_back(blockNumberOfContracted);
+        blockNumberOfContracted = 0;
       }
+      blockNumberOfContracted++;
     }
     allCoefficients.push_back(moCoefficients);
   }
+
+  if ( std::adjacent_find( numberContractedBf.begin(), numberContractedBf.end(), std::not_equal_to<int>() ) != numberContractedBf.end() ) {
+    printf("mopacplugin) Molecular orbital section corrupted. Did not read consistent number of contracted basis functions!\n");
+    return FALSE;
+  }
   printf("%d\n", num_orbitals);
+
+  std::cout << numberContractedBf[0] << std::endl;
 
   // assign the number of contracted functions to wavefunction size
   data->wavef_size = numberContractedBf[0];
@@ -593,17 +599,17 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   }
 
   // LOGGING for MO coefficients
-  /*
-  float coeff2 = 0;
-  for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
-    if (t % data->wavef_size == 0) {
-      std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
-      coeff2 = 0;
-    }
-    coeff2 += wf->wave_coeffs[t]*wf->wave_coeffs[t];
-    std::cout << wf->wave_coeffs[t] << std::endl;
-  }
-  */
+
+  // float coeff2 = 0;
+  // for (size_t t = 0; t < (num_orbitals * data->wavef_size); t++) {
+  //   if (t % data->wavef_size == 0) {
+  //     std::cout << "---------- " << t/num_orbitals << " c2: " << coeff2 << std::endl;
+  //     coeff2 = 0;
+  //   }
+  //   coeff2 += wf->wave_coeffs[t]*wf->wave_coeffs[t];
+  //   std::cout << wf->wave_coeffs[t] << std::endl;
+  // }
+
 
   if (data->num_frames_read < 1) {
     data->angular_momentum = (int*)calloc(wfAngMoment.size(), sizeof(int));
@@ -618,11 +624,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   // results when reading unrestricted jobs
   data->num_occupied_A = occupiedOrbitals;
   data->num_occupied_B = occupiedOrbitals;
-  // data->num_electrons = numberOfElectrons;
-
-  // if (data->num_electrons != numberOfElectrons) {
-  //
-  // }
+  data->num_electrons = numberOfElectrons;
 
   std::cout << "----------------------------------------" << std::endl;
   std::cout << "Total number of orbitals: " << num_orbitals << std::endl;
@@ -634,22 +636,168 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   return TRUE;
 }
 
-static int get_basis_for_element(std::string element, shell_t* shells) {
-  int shell_counter = 0;
-  
-  // shells = (shell_t*)realloc(shell_counter,sizeof(shell_t));
+static int fill_basis_arrays(qmdata_t *data) {
+  mopacdata *mopac = (mopacdata *)data->format_specific_data;
+  int i, j, k;
+  int shellcount = 0;
+  int primcount = 0;
+
+  float *basis;
+  int *num_shells_per_atom;
+  int *num_prim_per_shell;
+  int *shell_types;
+  int *atomicnum_per_basisatom;
+
+  /* Count the total number of primitives which
+   * determines the size of the basis array. */
+  for(i=0; i<data->num_basis_atoms; i++) {
+    for (j=0; j<data->basis_set[i].numshells; j++) {
+      primcount += data->basis_set[i].shell[j].numprims;
+    }
+  }
+  std::cout<< "pcount: " << primcount << std::endl;
+
+  /* reserve space for pointer to array containing basis
+   * info, i.e. contraction coeficients and expansion
+   * coefficients; need 2 entries per basis function, i.e.
+   * exponent and contraction coefficient; also,
+   * allocate space for the array holding the orbital symmetry
+   * information per primitive Gaussian.
+   * Finally, initialize the arrays holding the number of
+   * shells per atom and the number of primitives per shell*/
+  basis = (float *)calloc(2*primcount,sizeof(float));
+
+  /* make sure memory was allocated properly */
+  if (basis == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  shell_types = (int *)calloc(data->num_shells, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (shell_types == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  num_shells_per_atom = (int *)calloc(data->num_basis_atoms, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (num_shells_per_atom == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  num_prim_per_shell = (int *)calloc(data->num_shells, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (num_prim_per_shell == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+  atomicnum_per_basisatom = (int *)calloc(data->num_basis_atoms, sizeof(int));
+
+  /* make sure memory was allocated properly */
+  if (atomicnum_per_basisatom == NULL) {
+    PRINTERR;
+    return FALSE;
+  }
+
+
+  /* store pointers in struct qmdata_t */
+  data->basis = basis;
+  data->shell_types = shell_types;
+  data->num_shells_per_atom = num_shells_per_atom;
+  data->num_prim_per_shell = num_prim_per_shell;
+  data->atomicnum_per_basisatom = atomicnum_per_basisatom;
+
+  /* Go through all basis set atoms and try to assign the
+   * atomic numbers. The basis set atoms are specified by
+   * name strings (the same as in the coordinate section,
+   * except for FMO calcs.) and we try to match the names
+   * from the two lists. The basis set atom list is symmetry
+   * unique while the coordinate atom list is complete.*/
+  primcount = 0;
+  for (i=0; i<data->num_basis_atoms; i++) {
+    int found = 0;
+
+    /* For this basis atom find a matching atom from the
+     * coordinate atom list. */
+    for(j=0; j<data->numatoms; j++) {
+      char basisname[BUFSIZ];
+      strcpy(basisname, data->basis_set[i].name);
+
+      /* for FMO calculations we have to strip the "-n" tail
+       * of the basis atom name. */
+      // if (gms->have_fmo) {
+      //   *strchr(basisname, '-') = '\0';
+      // }
+
+      if (!strcmp(data->atoms[j].type, basisname)) {
+        found = 1;
+        break;
+      }
+    }
+    if (!found) {
+      printf("orcaplugin) WARNING: Couldn't find atomic number for basis set atom %s\n",
+             data->basis_set[i].name);
+      data->basis_set[i].atomicnum = 0;
+      atomicnum_per_basisatom[i] = 0;
+    } else {
+      /* assign atomic number */
+      data->basis_set[i].atomicnum = data->atoms[j].atomicnum;
+      atomicnum_per_basisatom[i]   = data->atoms[j].atomicnum;
+    }
+    num_shells_per_atom[i] = data->basis_set[i].numshells;
+
+    for (j=0; j<data->basis_set[i].numshells; j++) {
+      shell_types[shellcount] = data->basis_set[i].shell[j].type;
+      num_prim_per_shell[shellcount] = data->basis_set[i].shell[j].numprims;
+
+      for (k=0; k<data->basis_set[i].shell[j].numprims; k++) {
+        basis[2*primcount  ] = data->basis_set[i].shell[j].prim[k].exponent;
+        basis[2*primcount+1] = data->basis_set[i].shell[j].prim[k].contraction_coeff;
+        primcount++;
+      }
+      shellcount++;
+    }
+  }
+  printf("orcaplugin) Filled basis arrays.\n");
+
+  return TRUE;
 }
 
 static int get_basis(qmdata_t *data) {
   data->basis_set = (basis_atom_t*)calloc(data->numatoms, sizeof(basis_atom_t));
+  data->num_basis_atoms = data->numatoms;
   for (size_t atom = 0; atom < data->numatoms; atom++) {
     std::string el(data->atoms[atom].type);
     std::cout << "Atom " << atom << " : " << el << std::endl;
-    shell_t* tempShell = (shell_t*)calloc(1,sizeof(shell_t));
-    get_basis_for_element(el, tempShell);
-    free(tempShell);
+    int ns = 0;
+    shell_t* tempShell = get_bas_4element(el, &ns);
+    std::cout << "number of s: " << ns << std::endl;
+    data->basis_set[atom].shell = tempShell;
+    data->basis_set[atom].numshells = ns;
+    data->num_shells += ns;
+    strncpy(data->basis_set[atom].name, data->atoms[atom].type, 11);
   }
-  return FALSE;
+  int pc = 0;
+  for(int i=0; i<data->num_basis_atoms; i++) {
+    std::cout << "nbas atoms: " << i << std::endl;
+    for (int j=0; j<data->basis_set[i].numshells; j++) {
+      std::cout << "--- " << j << " " << data->basis_set[i].shell[j].numprims << std::endl;
+      pc += data->basis_set[i].shell[j].numprims;
+      if (data->basis_set[i].shell[j].numprims > 3) {
+        std::cout << data->basis_set[i].name << std::endl;
+        std::cout << data->basis_set[i].shell[j].type << std::endl;
+        std::cout << data->basis_set[i].shell[j].prim[i].exponent << std::endl;
+      }
+    }
+  }
+  std::cout << "mypcount: " << pc << std::endl;
+  return fill_basis_arrays(data);
 }
 
 
@@ -952,6 +1100,7 @@ static int read_timestep(void *mydata, int natoms,
        molfile_timestep_t *ts, molfile_qm_metadata_t *qm_metadata,
 			 molfile_qm_timestep_t *qm_ts)
 {
+  std::cout << "READ TIMESTEP" << std::endl;
   qmdata_t *data = (qmdata_t *)mydata;
   qm_timestep_t *cur_ts;
   int offset;
@@ -1018,6 +1167,7 @@ static int read_timestep(void *mydata, int natoms,
   if (cur_ts->wave) {
     std::cout << "mopacplugin) Have wavefunctions: " << cur_ts->numwave << " in frame: " << data->num_frames_sent << std::endl;
     for (i=0; i<cur_ts->numwave; i++) {
+      std::cout << "Reading wf" << std::endl;
       qm_wavefunction_t *wave = &cur_ts->wave[i];
       qm_ts->wave[i].type         = wave->type;
       qm_ts->wave[i].spin         = wave->spin;
@@ -1029,14 +1179,17 @@ static int read_timestep(void *mydata, int natoms,
       if (wave->wave_coeffs) {
         memcpy(qm_ts->wave[i].wave_coeffs, wave->wave_coeffs, wave->num_orbitals*data->wavef_size*sizeof(float));
       }
+      std::cout << "wave_coeffs OK" << std::endl;
       if (wave->orb_energies) {
         memcpy(qm_ts->wave[i].orbital_energies, wave->orb_energies,
                wave->num_orbitals*sizeof(float));
       }
+      std::cout << "orb energies OK" << std::endl;
       if (wave->has_occup) {
         memcpy(qm_ts->wave[i].occupancies, wave->orb_occupancies,
                wave->num_orbitals*sizeof(float));
       }
+      std::cout << "occup OK" << std::endl;
     }
   }
   //
@@ -1047,6 +1200,7 @@ static int read_timestep(void *mydata, int natoms,
   }
 
   data->num_frames_sent++;
+  std::cout << "Frames sent: " << data->num_frames_sent << std::endl;
 
   return MOLFILE_SUCCESS;
 }
