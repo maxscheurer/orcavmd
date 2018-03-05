@@ -556,6 +556,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
 
   // assign the number of contracted functions to wavefunction size
   data->wavef_size = numberContractedBf[0];
+  data->num_basis_funcs = numberContractedBf[0];
   wf->num_orbitals  = num_orbitals;
   wf->orb_energies = (float *) calloc(num_orbitals, sizeof(float));
   wf->orb_occupancies = (float *) calloc(num_orbitals, sizeof(float));
