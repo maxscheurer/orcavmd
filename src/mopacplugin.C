@@ -1239,7 +1239,7 @@ static int read_qm_timestep_metadata(void *mydata,
     /* get a pointer to the current qm timestep */
     cur_ts = data->qm_timestep+data->num_frames_sent;
 
-    // std::cout << "numwave: " << cur_ts->numwave << std::endl;
+    std::cout << "numwave: " << cur_ts->numwave << std::endl;
 
     for (i=0; (i<MOLFILE_MAXWAVEPERTS && i<cur_ts->numwave); i++) {
       meta->num_orbitals_per_wavef[i] = cur_ts->wave[i].num_orbitals;
@@ -1256,7 +1256,7 @@ static int read_qm_timestep_metadata(void *mydata,
     if (cur_ts->gradient) meta->has_gradient = TRUE;
 
   } else {
-    // std::cout << "not have frame" << std::endl;
+    std::cout << "not have frame" << std::endl;
     meta->has_gradient = FALSE;
     meta->num_scfiter  = 0;
     meta->num_orbitals_per_wavef[0] = 0;
