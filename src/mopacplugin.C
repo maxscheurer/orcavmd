@@ -442,6 +442,9 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
   std::vector<int> wfAngMoment;
   std::vector<std::string> orbitalNames;
   MoCoeff allCoefficients;
+  
+  int have_virtual = 0;
+  int reading_virtual = 0;
 
   // orbital indices
   int n[8];
@@ -461,14 +464,22 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
       firstRead++;
     }
     numReadOrbitalIndices = sscanf(buffer, "%s %s %d %d %d %d %d %d %d %d", &dumpName, &dumpBasisFunc, &n[0], &n[1], &n[2], &n[3], &n[4], &n[5], &n[6], &n[7]);
-    if (!numReadOrbitalIndices || numReadOrbitalIndices == -1) {
+    if ((numReadOrbitalIndices != 10 || numReadOrbitalIndices == -1) && have_virtual) {
       /* If there are no orbital indexes then this must be the
        * end of the wavefunction coefficient table. */
       fseek(data->file, filepos, SEEK_SET);
       wavefunctionRead = 1;
       break;
+    } else if ((numReadOrbitalIndices != 10 || numReadOrbitalIndices == -1) && !have_virtual) {
+      reading_virtual = 1;
+      have_virtual = 1;
+      eatline(data->file, 2);
+      GET_LINE(buffer, data->file);
+      continue;
     }
     eatline(data->file, 1);
+    line = trimleft(trimright(buffer));
+    std::cout << line << std::endl;
     numReadOrbitalIndices -= 2; // because of the "Root No." string in the beginning
 
     // reads the orbital energies
@@ -476,6 +487,7 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
     numReadEnergies = sscanf(buffer, "%f %f %f %f %f %f %f %f", &energies[0], &energies[1], &energies[2],
      &energies[3], &energies[4], &energies[5], &energies[6], &energies[7]);
     if (numReadEnergies != numReadOrbitalIndices) {
+      std::cout << numReadEnergies << " " << numReadOrbitalIndices << std::endl;
       printf("mopacplugin) Molecular Orbital section corrupted! energies.\n");
       break;
     }
@@ -487,10 +499,12 @@ static int get_wavefunction(qmdata_t *data, qm_timestep_t *ts, qm_wavefunction_t
         std::cout << "Energy: " <<energies[c]<< std::endl;
         num_orbitals++;
 
-        orbitalOccupancies.push_back(2);
-        // std::cout << "Occupancy: " << occ[c] << std::endl;
-	      numberOfElectrons += 2;
-	      occupiedOrbitals++;
+        if (!reading_virtual) {
+          orbitalOccupancies.push_back(2);
+          // std::cout << "Occupancy: " << occ[c] << std::endl;
+  	      numberOfElectrons += 2;
+  	      occupiedOrbitals++;
+        }
       }
     }
 
@@ -835,7 +849,7 @@ static int parse_static_data(qmdata_t *data, int* natoms) {
 
   read_first_frame(data);
 
-  print_input_data(data);
+  // print_input_data(data);
   std::cout << data->runtype << std::endl;
 
   return TRUE;
